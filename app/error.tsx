@@ -25,7 +25,6 @@ export default function Error({
     // Route errors are already reported by Next.js; this just surfaces
     // them in the local dev console for convenience.
     if (process.env.NODE_ENV === "development") {
-      // eslint-disable-next-line no-console
       console.error(error);
     }
   }, [error]);
