@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 // ASSUMPTION: shadcn "card" and "skeleton" components are already installed
 // at @/components/ui/card and @/components/ui/skeleton. Run
 // `npx shadcn@latest add card skeleton` if not.
