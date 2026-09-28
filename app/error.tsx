@@ -1,25 +1,26 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import {
-  StatusPage,
-  brandButtonClassName,
-} from "@/components/flag/status-page";
+
+import { useRouter } from "next/navigation";
+import { brandButtonClassName, StatusPage } from "@/components/shared/status-page";
 
 // Minimum time the "Trying again…" state stays visible, so a retry that
 // resolves instantly still reads as a deliberate action rather than a
 // no-op. Purely a perception thing — reset() itself is not delayed by app logic.
 const MIN_RETRY_VISIBLE_MS = 600;
+interface ErrorProps {
+  error: {
+    digest?: string;
+    message: string;
+    name: string;
+  };
+}
 
-export default function Error({
-  error,
-  reset,
-}: {
-  error: Error & { digest?: string };
-  reset: () => void;
-}) {
+export default function Error({ error }: ErrorProps) {
   const [isRetrying, setIsRetrying] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     // Route errors are already reported by Next.js; this just surfaces
@@ -42,14 +43,17 @@ export default function Error({
     // the error persists, the boundary re-catches and this component
     // remounts fresh, which naturally puts the button back to "Try again".
     timeoutRef.current = setTimeout(() => {
-      reset();
+      router.refresh();
+      setIsRetrying(false);
     }, MIN_RETRY_VISIBLE_MS);
   }
 
   return (
     <StatusPage
       title="Something went wrong"
-      message="We hit a snag loading this page. Please try again."
+      message={
+        error.message || "We hit a snag loading this page. Please try again."
+      }
       action={
         <button
           type="button"
