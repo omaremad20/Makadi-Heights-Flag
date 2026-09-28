@@ -48,7 +48,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         montserrat.variable,
       )}
     >
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full justify-between flex flex-col">
         {/*
           Runs synchronously, before the browser paints anything below it
           and before Next.js hydrates — this is what prevents both the
