@@ -3,7 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useRouter } from "next/navigation";
-import { brandButtonClassName, StatusPage } from "@/components/shared/status-page";
+import {
+  brandButtonClassName,
+  StatusPage,
+} from "@/components/shared/status-page";
 
 // Minimum time the "Trying again…" state stays visible, so a retry that
 // resolves instantly still reads as a deliberate action rather than a
@@ -52,7 +55,9 @@ export default function Error({ error }: ErrorProps) {
     <StatusPage
       title="Something went wrong"
       message={
-        error.message || "We hit a snag loading this page. Please try again."
+        error.digest === "supabase-0123"
+          ? error.message
+          : "We hit a snag loading this page. Please try again."
       }
       action={
         <button
