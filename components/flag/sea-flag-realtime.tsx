@@ -9,6 +9,7 @@ import {
   isSeaFlag,
 } from "@/lib/services/sea/sea.service";
 import { createClient } from "@/lib/supabase/client";
+import { toast } from "sonner";
 
 const FLAG_CONFIG: Record<
   SeaFlag,
@@ -20,12 +21,14 @@ const FLAG_CONFIG: Record<
 > = {
   blue: {
     label: "Blue flag",
-    dotClassName: "bg-brand-primary",
+    dotClassName:
+      "bg-brand-primary h-2 w-2 rounded-full bg-[#88BCBB] shadow-[0_0_0_3px_rgba(136,188,187,0.3)] motion-safe:animate-pulse",
     textClassName: "text-brand-primary",
   },
   red: {
     label: "Red flag 🚩",
-    dotClassName: "bg-destructive",
+    dotClassName:
+      "bg-destructive h-2 w-2 rounded-full shadow motion-safe:animate-pulse",
     textClassName: "text-destructive",
   },
 };
@@ -106,8 +109,10 @@ export function SeaFlagRealtime({ initialSea }: { initialSea: ISea }) {
           if (isSeaFlag(nextFlag) && typeof nextUpdatedAt === "string") {
             if (nextFlag === "blue") {
               audioRefOpen.current?.play().catch(() => {});
+              toast.info("Swimming is now allowed. The flag is blue.");
             } else {
               audioRefClose.current?.play().catch(() => {});
+              toast.info("Swimming is now prohibited. The flag is red.");
             }
             setData({
               flag: nextFlag,
@@ -141,7 +146,7 @@ export function SeaFlagRealtime({ initialSea }: { initialSea: ISea }) {
         <div className="flex items-center gap-2">
           <span
             aria-hidden="true"
-            className={`h-2.5 w-2.5 rounded-full ${config.dotClassName}`}
+            className={`h-2 w-2 rounded-full bg-[#88BCBB] shadow-[0_0_0_3px_rgba(136,188,187,0.3)] motion-safe:animate-pulse ${config.dotClassName}`}
           />
 
           <span
