@@ -1,12 +1,12 @@
-import { MealPeriod } from "@/lib/hotels/hotels";
-import { formatMealTime } from "@/lib/hotels/meal-status";
+import { formatTime } from "@/lib/helpers";
+import { DiningOption } from "@/lib/types";
 
 export function MealCard({
   meal,
-  isActive,
+  is_active,
 }: {
-  meal: MealPeriod;
-  isActive: boolean;
+  meal: DiningOption;
+  is_active: boolean;
 }) {
   return (
     <article className="flex w-64 shrink-0 snap-start flex-col gap-3 rounded-2xl border border-brand-primary/15 bg-white px-5 py-5 shadow-[0_1px_3px_rgba(45,104,103,0.08)]">
@@ -14,7 +14,7 @@ export function MealCard({
         <h3 className="font-brand-heading text-lg text-brand-primary">
           {meal.name}
         </h3>
-        {isActive ? (
+        {is_active ? (
           <span className="flex items-center gap-1.5 text-xs font-medium text-brand-secondary">
             <span
               aria-hidden="true"
@@ -30,7 +30,7 @@ export function MealCard({
       </div>
 
       <p className="font-brand-body text-sm text-brand-secondary">
-        {formatMealTime(meal.startTime)} – {formatMealTime(meal.endTime)}
+        {formatTime(meal.start_time)} – {formatTime(meal.end_time)}
       </p>
 
       <p className="font-brand-body text-sm leading-relaxed text-brand-primary/80">

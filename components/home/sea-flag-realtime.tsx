@@ -10,6 +10,7 @@ import {
 } from "@/lib/services/sea/sea.service";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
+import { formatLastUpdated } from "@/lib/helpers";
 
 const FLAG_CONFIG: Record<
   SeaFlag,
@@ -32,51 +33,6 @@ const FLAG_CONFIG: Record<
     textClassName: "text-destructive",
   },
 };
-
-function formatLastUpdated(updatedAt: string): string {
-  const updatedDate = new Date(updatedAt);
-  const now = new Date();
-
-  const startOfToday = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-  );
-
-  const startOfUpdatedDay = new Date(
-    updatedDate.getFullYear(),
-    updatedDate.getMonth(),
-    updatedDate.getDate(),
-  );
-
-  const diffInDays = Math.floor(
-    (startOfToday.getTime() - startOfUpdatedDay.getTime()) /
-      (1000 * 60 * 60 * 24),
-  );
-
-  const time = updatedDate.toLocaleString("en-EG", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-
-  if (diffInDays === 0) {
-    return `Today at ${time}`;
-  }
-
-  if (diffInDays === 1) {
-    return `Yesterday at ${time}`;
-  }
-
-  if (diffInDays < 30) {
-    return `${diffInDays} days ago at ${time}`;
-  }
-
-  return `${updatedDate.toLocaleString("en-EG", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  })} at ${time}`;
-}
 
 export function SeaFlagRealtime({ initialSea }: { initialSea: ISea }) {
   const [data, setData] = useState<ISea>(initialSea);

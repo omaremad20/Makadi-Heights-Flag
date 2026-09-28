@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { MakadiHeghitsLogo } from "./makadi-heights-logo";
+import { MakadiHeghitsLogo } from "../shared/makadi-heights-logo";
 
 // Shared pill-button styling — reused by the menu CTA, not-found, and error
 // actions so every call-to-action in the app looks and behaves the same.
@@ -24,7 +24,7 @@ export function StatusPage({
           <h1 className="font-brand-heading text-3xl text-brand-primary">
             {title}
           </h1>
-          <p className="font-brand-body text-brand-secondary">{message}</p>
+          <p className="font-mono text-brand-secondary">{message}</p>
         </div>
         {action}
       </div>
