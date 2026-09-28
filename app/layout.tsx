@@ -2,8 +2,11 @@ import { SplashScreen } from "@/components/flag/splash-screen";
 import { cn } from "@/lib/utils";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Montserrat } from "next/font/google";
-import "./globals.css";
 import Script from "next/script";
+import { Toaster } from "sonner";
+import "./globals.css";
+import { Footer } from "@/components/shared/footer";
+import { Navbar } from "@/components/shared/navbar";
 
 const montserrat = Montserrat({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -34,6 +37,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
+      suppressHydrationWarning
       lang="en"
       className={cn(
         "h-full",
@@ -55,23 +59,31 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         */}
         <Script id="splash-init" strategy="beforeInteractive">
           {`
-            (function () {
-              try {
-                var KEY = "the-flag:splash-shown";
-                if (window.sessionStorage.getItem(KEY) === "true") {
-                  document.documentElement.setAttribute("data-splash", "skip");
-                } else {
-                  window.sessionStorage.setItem(KEY, "true");
-                  document.documentElement.style.overflow = "hidden";
-                }
-              } catch (e) {
-                document.documentElement.setAttribute("data-splash", "skip");
-              }
-            })();
+    (function () {
+  var root = document.documentElement;
+  try {
+    var KEY = "the-flag:splash-shown";
+    if (window.sessionStorage.getItem(KEY) === "true") {
+      root.setAttribute("data-splash", "skip");
+    } else {
+      window.sessionStorage.setItem(KEY, "true");
+      root.setAttribute("data-splash-lock", "");
+      // Backstop that doesn't depend on React. Keep in sync with the CSS animation (2.8s).
+      setTimeout(function () { root.removeAttribute("data-splash-lock"); }, 2900);
+    }
+  } catch (e) {
+    root.setAttribute("data-splash", "skip");
+  }
+})();
           `}
         </Script>
         <SplashScreen />
-        {children}
+        <Navbar />
+        <main className="mx-auto flex min-h-full w-[95%] sm:w-[90%] flex-col gap-10 py-10">
+          {children}
+        </main>
+        <Footer />
+        <Toaster />
       </body>
     </html>
   );
