@@ -1,9 +1,9 @@
+import { AquaParkSection } from "@/components/home/aqua-park-section";
+import { BeachAccessSection } from "@/components/home/beach-access-section";
 import { LocationCard } from "@/components/home/location-card";
 import { MealSchedule } from "@/components/home/meal-schedule";
 import { MenuButton } from "@/components/home/menu-button";
 import { SeaConditionsCard } from "@/components/home/sea-conditions-card";
-import { AquaParkSection } from "@/components/home/aqua-park-section";
-import { BeachAccessSection } from "@/components/home/beach-access-section";
 import { AquaParkSectionSkeleton } from "@/components/skeletons/aqua-park-section-skeleton";
 import { BeachAccessSectionSkeleton } from "@/components/skeletons/beach-access-section-skeleton";
 import MapSkeleton from "@/components/skeletons/map-skeleton";
@@ -14,7 +14,6 @@ import { getHotel } from "@/lib/hotels/hotels";
 import { fetchHotelData } from "@/lib/services/hotel/hotel.service";
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import Error from "./error";
 
 export const metadata: Metadata = {
   title: "Makadi Heights — Serenity ",
@@ -27,16 +26,9 @@ export default async function Page() {
   const hotel = getHotel("serenity");
   const { status, data } = await fetchHotelData();
 
-  if (status === "error" || !hotel || !data)
-    return (
-      <Error
-        error={{
-          digest: "supabase-0123",
-          message: "Failed to fetch data.",
-          name: "Server error",
-        }}
-      />
-    );
+  if (status === "error" || !hotel || !data) {
+    throw new Error("Failed to fetch data");
+  }
 
   return (
     <>
