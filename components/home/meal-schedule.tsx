@@ -1,7 +1,6 @@
-import { Hotel } from "@/lib/hotels/hotels";
 import { getActiveMeal } from "@/lib/hotels/meal-status";
 import { MealCard } from "./meal-card";
-import { DiningOption } from "@/lib/types";
+import { DiningOption, Hotel } from "@/lib/types";
 
 export function MealSchedule({
   hotel,
