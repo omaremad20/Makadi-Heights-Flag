@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { AquaParkSection } from "@/components/home/aqua-park-section";
 import { BeachAccessSection } from "@/components/home/beach-access-section";
 import { LocationCard } from "@/components/home/location-card";
