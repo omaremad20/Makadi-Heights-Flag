@@ -1,9 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import {
-  StatusPage,
-  brandButtonClassName,
-} from "@/components/flag/status-page";
+import { brandButtonClassName, StatusPage } from "@/components/shared/status-page";
 
 export const metadata: Metadata = {
   title: "Page not found",
