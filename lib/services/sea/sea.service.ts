@@ -22,7 +22,7 @@ export function isSeaFlag(value: unknown): value is SeaFlag {
 
 export async function getSeaFlag(): Promise<SeaFlagResult> {
   try {
-    const supabase = await createClient();
+    const supabase = createClient();
 
     const { data, error } = await supabase
       .from("sea")
