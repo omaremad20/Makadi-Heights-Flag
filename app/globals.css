@@ -216,6 +216,8 @@
 
 .splash-overlay {
   animation: splash-overlay 2.8s ease-out both;
+  touch-action: none; /* blocks touch scrolling on iOS/Android before hydration */
+  overscroll-behavior: none;
 }
 
 /* Set by the blocking script in layout.tsx when sessionStorage shows the
@@ -244,4 +246,11 @@ html[data-splash="skip"] .splash-overlay {
     opacity: 1;
     transform: none;
   }
+}
+
+/* Splash scroll lock: set pre-paint by the script in layout.tsx */
+html[data-splash-lock] {
+  overflow: hidden;
+  overscroll-behavior: none;
+  scrollbar-gutter: stable; /* keeps width the same, so no jump when unlocked */
 }
