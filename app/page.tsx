@@ -31,7 +31,7 @@ export default async function Page() {
     return (
       <Error
         error={{
-          digest: "403",
+          digest: "supabase-0123",
           message: "Failed to fetch data.",
           name: "Server error",
         }}
