@@ -1,17 +1,20 @@
-import { MakadiHeghitsLogo } from "@/components/flag/makadi-heights-logo";
-import { LocationCard } from "@/components/flag/location-card";
-import { MealSchedule } from "@/components/flag/meal-schedule";
-import { MenuButton } from "@/components/flag/menu-button";
+import { LocationCard } from "@/components/home/location-card";
+import { MealSchedule } from "@/components/home/meal-schedule";
+import { MenuButton } from "@/components/home/menu-button";
+import { SeaConditionsCard } from "@/components/home/sea-conditions-card";
 import { AquaParkSection } from "@/components/home/aqua-park-section";
 import { BeachAccessSection } from "@/components/home/beach-access-section";
-import { Footer } from "@/components/shared/footer";
-import {
-  SeaConditionsCard,
-  SeaConditionsCardSkeleton,
-} from "@/components/flag/sea-conditions-card";
+import { AquaParkSectionSkeleton } from "@/components/skeletons/aqua-park-section-skeleton";
+import { BeachAccessSectionSkeleton } from "@/components/skeletons/beach-access-section-skeleton";
+import MapSkeleton from "@/components/skeletons/map-skeleton";
+import MealScheduleSkeleton from "@/components/skeletons/meal-schedule-skeleton";
+import MenuBtnSkeleton from "@/components/skeletons/menu-btn-skeleton";
+import SeaConditionsCardSkeleton from "@/components/skeletons/sea-conditions-card-skeleton";
 import { getHotel } from "@/lib/hotels/hotels";
+import { fetchHotelData } from "@/lib/services/hotel/hotel.service";
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import Error from "./error";
 
 export const metadata: Metadata = {
   title: "Makadi Heights — Serenity ",
@@ -19,24 +22,24 @@ export const metadata: Metadata = {
     "Sea conditions, dining hours, and location for Serenity at Makadi Heights.",
 };
 
-export default function Page() {
+export default async function Page() {
   // Single hotel for now; swap for a param/lookup once more hotels exist.
   const hotel = getHotel("serenity");
+  const { status, data } = await fetchHotelData();
 
-  if (!hotel) {
+  if (status === "error" || !hotel || !data)
     return (
-      <main className="flex min-h-full items-center justify-center px-4 py-16">
-        <p className="font-brand-body text-brand-secondary">
-          This property isn&apos;t available right now.
-        </p>
-      </main>
+      <Error
+        error={{
+          digest: "403",
+          message: "Failed to fetch data.",
+          name: "Server error",
+        }}
+      />
     );
-  }
 
   return (
-    <main className="mx-auto flex min-h-full w-[95%] flex-col gap-10 py-5">
-      <MakadiHeghitsLogo />
-
+    <>
       <div className="grid">
         <Suspense fallback={<SeaConditionsCardSkeleton />}>
           <SeaConditionsCard
@@ -46,15 +49,26 @@ export default function Page() {
           />
         </Suspense>
       </div>
-      <BeachAccessSection />
-      <AquaParkSection />
 
-      <MealSchedule hotel={hotel} />
-      <MenuButton href={hotel.menuHref} />
-      <Suspense fallback={<SeaConditionsCardSkeleton />}>
+      <Suspense fallback={<BeachAccessSectionSkeleton />}>
+        <BeachAccessSection beach_access_methods={data.beach_access_methods} />
+      </Suspense>
+
+      <Suspense fallback={<AquaParkSectionSkeleton />}>
+        <AquaParkSection aquapark={data.aquapark} />
+      </Suspense>
+
+      <Suspense fallback={<MealScheduleSkeleton />}>
+        <MealSchedule meals={data.dining} hotel={hotel} />
+      </Suspense>
+
+      <Suspense fallback={<MenuBtnSkeleton />}>
+        <MenuButton href={data.menu_link} />
+      </Suspense>
+
+      <Suspense fallback={<MapSkeleton />}>
         <LocationCard hotel={hotel} />
       </Suspense>
-      <Footer />
-    </main>
+    </>
   );
 }
