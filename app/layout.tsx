@@ -1,4 +1,3 @@
-import { SplashScreen } from "@/components/flag/splash-screen";
 import { cn } from "@/lib/utils";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Montserrat } from "next/font/google";
@@ -7,6 +6,7 @@ import { Toaster } from "sonner";
 import "./globals.css";
 import { Footer } from "@/components/shared/footer";
 import { Navbar } from "@/components/shared/navbar";
+import { SplashScreen } from "@/components/shared/splash-screen";
 
 const montserrat = Montserrat({ subsets: ["latin"], variable: "--font-sans" });
 
