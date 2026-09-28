@@ -18,7 +18,7 @@ export function Footer() {
             className="transition-opacity border rounded-full shadow p-1  hover:opacity-70"
           >
             <Image
-              src="/icons/whatsapp_logo.png"
+              src="/icons/whatsapp_logo.webp"
               alt="WhatsApp"
               width={48}
               height={48}
@@ -32,7 +32,7 @@ export function Footer() {
             className="transition-opacity border rounded-full shadow p-1  hover:opacity-70"
           >
             <Image
-              src="/icons/phone_logo.png"
+              src="/icons/phone_logo.webp"
               alt="Call"
               width={48}
               height={48}
