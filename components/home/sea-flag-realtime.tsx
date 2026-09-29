@@ -34,7 +34,11 @@ const FLAG_CONFIG: Record<
   },
 };
 
-export function SeaFlagRealtime({ initialSea }: { initialSea: ISea }) {
+export function SeaFlagRealtime({
+  initialSea,
+}: {
+  initialSea: ISea;
+}) {
   const [data, setData] = useState<ISea>(initialSea);
 
   const audioRefClose = useRef<HTMLAudioElement | null>(null);
@@ -43,11 +47,68 @@ export function SeaFlagRealtime({ initialSea }: { initialSea: ISea }) {
   useEffect(() => {
     audioRefClose.current = new Audio("/sounds/flag-close.mp3");
     audioRefOpen.current = new Audio("/sounds/flag-open.mp3");
+
+    return () => {
+      audioRefClose.current = null;
+      audioRefOpen.current = null;
+    };
   }, []);
 
   useEffect(() => {
     const supabase = createClient();
 
+    /**
+     * Fetch the latest sea flag directly from the database.
+     *
+     * This is used when the user returns to the tab after it
+     * has been in the background and may have missed realtime events.
+     */
+    const syncLatestSea = async () => {
+      const { data: latestSea, error } = await supabase
+        .from("sea")
+        .select("flag, updated_at")
+        .single();
+
+      if (error) {
+        if (process.env.NODE_ENV === "development") {
+          console.error("Failed to sync sea flag:", error);
+        }
+
+        return;
+      }
+
+      if (
+        latestSea &&
+        isSeaFlag(latestSea.flag) &&
+        typeof latestSea.updated_at === "string"
+      ) {
+        setData({
+          flag: latestSea.flag,
+          updated_at: latestSea.updated_at,
+        });
+      }
+    };
+
+    /**
+     * Handle tab visibility changes.
+     *
+     * When the user comes back to this tab, fetch the latest
+     * database state in case a realtime event was missed.
+     */
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void syncLatestSea();
+      }
+    };
+
+    document.addEventListener(
+      "visibilitychange",
+      handleVisibilityChange,
+    );
+
+    /**
+     * Realtime subscription.
+     */
     const channel = supabase
       .channel("sea-flag-changes")
       .on(
@@ -59,36 +120,66 @@ export function SeaFlagRealtime({ initialSea }: { initialSea: ISea }) {
         },
         (payload: RealtimePostgresChangesPayload<ISea>) => {
           const nextFlag = (payload.new as { flag?: unknown }).flag;
-          const nextUpdatedAt = (payload.new as { updated_at?: unknown })
-            .updated_at;
 
-          if (isSeaFlag(nextFlag) && typeof nextUpdatedAt === "string") {
-            if (nextFlag === "blue") {
-              audioRefOpen.current?.play().catch(() => {});
-              toast.info("Swimming is now allowed. The flag is blue.");
-            } else {
-              audioRefClose.current?.play().catch(() => {});
-              toast.info("Swimming is now prohibited. The flag is red.");
+          const nextUpdatedAt = (
+            payload.new as {
+              updated_at?: unknown;
             }
-            setData({
-              flag: nextFlag,
-              updated_at: nextUpdatedAt,
-            });
+          ).updated_at;
+
+          if (
+            !isSeaFlag(nextFlag) ||
+            typeof nextUpdatedAt !== "string"
+          ) {
+            return;
           }
+
+          /**
+           * Realtime update:
+           *
+           * Unlike syncLatestSea(), this is a real-time change,
+           * so we show the notification and play the sound.
+           */
+          if (nextFlag === "blue") {
+            audioRefOpen.current?.play().catch(() => {});
+
+            toast.info(
+              "Swimming is now allowed. The flag is blue.",
+            );
+          } else {
+            audioRefClose.current?.play().catch(() => {});
+
+            toast.info(
+              "Swimming is now prohibited. The flag is red.",
+            );
+          }
+
+          setData({
+            flag: nextFlag,
+            updated_at: nextUpdatedAt,
+          });
         },
       )
       .subscribe((status, err) => {
-        if (err && process.env.NODE_ENV === "development") {
-          console.error("Sea flag realtime subscription error:", err);
-        }
-
         if (process.env.NODE_ENV === "development") {
           console.log("Sea flag realtime status:", status);
+
+          if (err) {
+            console.error(
+              "Sea flag realtime subscription error:",
+              err,
+            );
+          }
         }
       });
 
     return () => {
-      supabase.removeChannel(channel);
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibilityChange,
+      );
+
+      void supabase.removeChannel(channel);
     };
   }, []);
 
@@ -97,7 +188,9 @@ export function SeaFlagRealtime({ initialSea }: { initialSea: ISea }) {
   return (
     <div className="grid grid-cols-2 gap-1">
       <div>
-        <p className="font-brand-body text-sm text-brand-secondary">Sea flag</p>
+        <p className="font-brand-body text-sm text-brand-secondary">
+          Sea flag
+        </p>
 
         <div className="flex items-center gap-2">
           <span
@@ -122,7 +215,7 @@ export function SeaFlagRealtime({ initialSea }: { initialSea: ISea }) {
         <div className="flex items-center gap-2">
           <span
             role="status"
-            className={`font-brand-body text-sm font-medium uppercase tracking-wide`}
+            className="font-brand-body text-sm font-medium uppercase tracking-wide"
           >
             {formatLastUpdated(data.updated_at)}
           </span>
