@@ -169,14 +169,13 @@
   0% {
     opacity: 1;
   }
+
   78% {
     opacity: 1;
   }
+
   100% {
     opacity: 0;
-    /* Lets clicks/scroll reach the page underneath once faded — matters
-       most if JS never runs to unmount this node (see no-JS fallback). */
-    pointer-events: none;
   }
 }
 
@@ -188,7 +187,6 @@
 @keyframes splash-skip {
   to {
     opacity: 0;
-    pointer-events: none;
   }
 }
 
@@ -216,7 +214,8 @@
 
 .splash-overlay {
   animation: splash-overlay 2.8s ease-out both;
-  touch-action: none; /* blocks touch scrolling on iOS/Android before hydration */
+  pointer-events: auto;
+  touch-action: none;
   overscroll-behavior: none;
 }
 
