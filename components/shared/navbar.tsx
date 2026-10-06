@@ -1,10 +1,18 @@
 // Server Component: only <NavMenu /> is a client component.
 // ⚠️ Adjust this import to match your real path / export style.
 
+"use client";
+
+import { usePathname } from "next/navigation";
 import { MakadiHeghitsLogo } from "./makadi-heights-logo";
 import { NavMenu } from "./nav-menu";
 
 export function Navbar() {
+  const path_name = usePathname();
+
+  if (path_name.startsWith("/dashboard") || path_name.startsWith("/login"))
+    return null;
+
   return (
     // --navbar-h is the single source of truth for the bar's height.
     <div className="[--navbar-h:4rem] sm:[--navbar-h:5rem]">

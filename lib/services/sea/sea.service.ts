@@ -26,10 +26,11 @@ export async function getSeaFlag(): Promise<SeaFlagResult> {
 
     const { data, error } = await supabase
       .from("sea")
-      .select("flag, updated_at")
+      .select("flag, updated_at,id")
       .limit(1)
       .maybeSingle();
 
+    console.log(data);
     if (error || !data || !isSeaFlag(data.flag)) {
       return { status: "error" };
     }

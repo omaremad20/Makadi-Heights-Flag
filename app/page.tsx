@@ -33,7 +33,7 @@ export default async function Page() {
   }
 
   return (
-    <>
+    <main className="mx-auto flex min-h-full w-[95%] sm:w-[90%] flex-col gap-10 py-10">
       <div className="grid">
         <Suspense fallback={<SeaConditionsCardSkeleton />}>
           <SeaConditionsCard
@@ -63,6 +63,6 @@ export default async function Page() {
       <Suspense fallback={<MapSkeleton />}>
         <LocationCard hotel={hotel} />
       </Suspense>
-    </>
+    </main>
   );
 }

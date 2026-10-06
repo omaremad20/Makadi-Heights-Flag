@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Montserrat } from "next/font/google";
 import Script from "next/script";
 import { Toaster } from "sonner";
-import "./globals.css";
+import "@/app/globals.css";
 import { Footer } from "@/components/shared/footer";
 import { Navbar } from "@/components/shared/navbar";
 import { SplashScreen } from "@/components/shared/splash-screen";
@@ -35,6 +35,7 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
+
   return (
     <html
       suppressHydrationWarning
@@ -79,9 +80,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         </Script>
         <SplashScreen />
         <Navbar />
-        <main className="mx-auto flex min-h-full w-[95%] sm:w-[90%] flex-col gap-10 py-10">
-          {children}
-        </main>
+        {/* Should remove this class when dashboard active */}
+        {/* mx-auto flex min-h-full w-[95%] sm:w-[90%] flex-col gap-10 py-10 */}
+        {children}
         <Footer />
         <Toaster />
       </body>

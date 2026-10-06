@@ -7,7 +7,7 @@ import SeaConditionsCardSkeleton from "@/components/skeletons/sea-conditions-car
 
 export default function Loading() {
   return (
-    <>
+    <main className="mx-auto flex min-h-full w-[95%] sm:w-[90%] flex-col gap-10 py-10">
       <div className="grid">
         <SeaConditionsCardSkeleton />
       </div>
@@ -21,6 +21,6 @@ export default function Loading() {
       <MenuBtnSkeleton />
 
       <MapSkeleton />
-    </>
+    </main>
   );
 }

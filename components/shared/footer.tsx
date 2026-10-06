@@ -1,7 +1,13 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 export function Footer() {
+  const path_name = usePathname();
+
+  if (path_name.startsWith("/dashboard") || path_name.startsWith("/login")) return null;
   return (
     <footer className="border-t w-[95%] sm:w-[90%] mx-auto border-brand-primary/10 pt-6 pb-6">
       <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:justify-between sm:text-left">
