@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { isUuid } from "@/lib/profiles/utils";
 import type { MutationResult } from "@/lib/profiles/types";
-import { deactivateEmployee, setEmployeeApproval } from "./profiles.service";
+import { deactivateEmployee, promoteEmployeeToAdmin, setEmployeeApproval } from "./profiles.service";
 
 const INVALID: MutationResult = { ok: false, code: "failed", message: "Invalid request." };
 
@@ -26,6 +26,13 @@ export async function setEmployeeApprovalAction(
 export async function deactivateEmployeeAction(userId: string): Promise<MutationResult> {
   if (!isUuid(userId)) return INVALID;
   const result = await deactivateEmployee(userId);
+  refresh(userId);
+  return result;
+}
+
+export async function promoteEmployeeToAdminAction(userId: string): Promise<MutationResult> {
+  if (!isUuid(userId)) return INVALID;
+  const result = await promoteEmployeeToAdmin(userId);
   refresh(userId);
   return result;
 }

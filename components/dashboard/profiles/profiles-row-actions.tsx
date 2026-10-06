@@ -1,17 +1,18 @@
 "use client";
 
-import Link from "next/link";
-import { useState, useTransition } from "react";
-import { toast } from "sonner";
 import {
   Ellipsis,
   Eye,
   LoaderCircle,
   Pencil,
+  ShieldPlus,
   Trash2,
   UserCheck,
   UserX,
 } from "lucide-react";
+import Link from "next/link";
+import { useState, useTransition } from "react";
+import { toast } from "sonner";
 
 import {
   AlertDialog,
@@ -23,7 +24,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,9 +34,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { MutationResult, Profile } from "@/lib/profiles/types";
 import { getDisplayName } from "@/lib/profiles/utils";
-import { deactivateEmployeeAction, setEmployeeApprovalAction } from "@/lib/services/profiles/profiles.actions";
+import {
+  deactivateEmployeeAction,
+  promoteEmployeeToAdminAction,
+  setEmployeeApprovalAction,
+} from "@/lib/services/profiles/profiles.actions";
 
-type DialogKind = "approval" | "deactivate" | null;
+type DialogKind = "approval" | "deactivate" | "promote" | null;
 type Props = {
   profile: Pick<
     Profile,
@@ -102,6 +107,9 @@ export function ProfileRowActions({ profile }: Props) {
               <Pencil aria-hidden /> Modify
             </Link>
           </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setDialog("promote")}>
+            <ShieldPlus aria-hidden /> Give admin
+          </DropdownMenuItem>
           {profile.is_active && (
             <>
               <DropdownMenuSeparator />
@@ -132,7 +140,7 @@ export function ProfileRowActions({ profile }: Props) {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-            className={!nextApproved ? "bg-destructive!" : ''}
+              className={!nextApproved ? "bg-destructive!" : ""}
               disabled={isPending}
               onClick={(event) => {
                 event.preventDefault(); // keep open until the request finishes
@@ -166,7 +174,7 @@ export function ProfileRowActions({ profile }: Props) {
             <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               disabled={isPending}
-              className={'bg-destructive!'}
+              className={"bg-destructive!"}
               onClick={(event) => {
                 event.preventDefault();
                 run(
@@ -179,6 +187,38 @@ export function ProfileRowActions({ profile }: Props) {
                 <LoaderCircle className="animate-spin" aria-hidden />
               )}
               Deactivate
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={dialog === "promote"} onOpenChange={guardClose}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Give admin access?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {name} will become an admin and will be able to manage employees
+              and promote others. Admins can&apos;t be modified or demoted by
+              other admins from this dashboard, so this can&apos;t be undone
+              here.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isPending}
+              onClick={(event) => {
+                event.preventDefault();
+                run(
+                  () => promoteEmployeeToAdminAction(profile.id),
+                  `${name} is now an admin`,
+                );
+              }}
+            >
+              {isPending && (
+                <LoaderCircle className="animate-spin" aria-hidden />
+              )}
+              Give admin
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -100,7 +100,7 @@ export async function getProfileById(id: string): Promise<ProfileDetails | null>
  */
 async function updateEmployee(
   userId: string,
-  patch: { approved: boolean } | { is_active: boolean },
+  patch: { approved: boolean } | { is_active: boolean } | { role: "admin" },
 ): Promise<MutationResult> {
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -141,4 +141,12 @@ export function setEmployeeApproval(userId: string, approved: boolean) {
 /** Soft delete. There is intentionally no `.delete()` call anywhere. */
 export function deactivateEmployee(userId: string) {
   return updateEmployee(userId, { is_active: false });
+}
+
+/**
+ * Promotes an employee to admin. Sends only `{ role: "admin" }`.
+ * The DB trigger allows employee -> admin only; there is no demote path from the client.
+ */
+export function promoteEmployeeToAdmin(userId: string) {
+  return updateEmployee(userId, { role: "admin" });
 }
