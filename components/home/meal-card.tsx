@@ -33,9 +33,9 @@ export function MealCard({
         {formatTime(meal.start_time)} – {formatTime(meal.end_time)}
       </p>
 
-      <p className="font-brand-body text-sm leading-relaxed text-brand-primary/80">
+      {/* <p className="font-brand-body text-sm leading-relaxed text-brand-primary/80">
         {meal.price}
-      </p>
+      </p> */}
     </article>
   );
 }

@@ -10,7 +10,6 @@ import {
 } from "@/lib/services/sea/sea.service";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
-import { formatLastUpdated } from "@/lib/helpers";
 
 const FLAG_CONFIG: Record<
   SeaFlag,
@@ -34,11 +33,7 @@ const FLAG_CONFIG: Record<
   },
 };
 
-export function SeaFlagRealtime({
-  initialSea,
-}: {
-  initialSea: ISea;
-}) {
+export function SeaFlagRealtime({ initialSea }: { initialSea: ISea }) {
   const [data, setData] = useState<ISea>(initialSea);
 
   const audioRefClose = useRef<HTMLAudioElement | null>(null);
@@ -101,10 +96,7 @@ export function SeaFlagRealtime({
       }
     };
 
-    document.addEventListener(
-      "visibilitychange",
-      handleVisibilityChange,
-    );
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     /**
      * Realtime subscription.
@@ -127,10 +119,7 @@ export function SeaFlagRealtime({
             }
           ).updated_at;
 
-          if (
-            !isSeaFlag(nextFlag) ||
-            typeof nextUpdatedAt !== "string"
-          ) {
+          if (!isSeaFlag(nextFlag) || typeof nextUpdatedAt !== "string") {
             return;
           }
 
@@ -143,15 +132,11 @@ export function SeaFlagRealtime({
           if (nextFlag === "blue") {
             audioRefOpen.current?.play().catch(() => {});
 
-            toast.info(
-              "Swimming is now allowed. The flag is blue.",
-            );
+            toast.info("Swimming is now allowed. The flag is blue.");
           } else {
             audioRefClose.current?.play().catch(() => {});
 
-            toast.info(
-              "Swimming is now prohibited. The flag is red.",
-            );
+            toast.info("Swimming is now prohibited. The flag is red.");
           }
 
           setData({
@@ -165,19 +150,13 @@ export function SeaFlagRealtime({
           console.log("Sea flag realtime status:", status);
 
           if (err) {
-            console.error(
-              "Sea flag realtime subscription error:",
-              err,
-            );
+            console.error("Sea flag realtime subscription error:", err);
           }
         }
       });
 
     return () => {
-      document.removeEventListener(
-        "visibilitychange",
-        handleVisibilityChange,
-      );
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
 
       void supabase.removeChannel(channel);
     };
@@ -188,26 +167,35 @@ export function SeaFlagRealtime({
   return (
     <div className="grid grid-cols-2 gap-1">
       <div>
-        <p className="font-brand-body text-sm text-brand-secondary">
-          Sea flag
-        </p>
+        <p className="font-brand-body text-sm text-brand-secondary">Sea flag</p>
 
-        <div className="flex items-center gap-2">
-          <span
-            aria-hidden="true"
-            className={`h-2 w-2 rounded-full bg-[#88BCBB] shadow-[0_0_0_3px_rgba(136,188,187,0.3)] motion-safe:animate-pulse ${config.dotClassName}`}
-          />
+        <div className="flex flex-col">
+          <div className="flex items-center gap-2">
+            <span
+              aria-hidden="true"
+              className={`h-2 w-2 rounded-full bg-[#88BCBB] shadow-[0_0_0_3px_rgba(136,188,187,0.3)] motion-safe:animate-pulse ${config.dotClassName}`}
+            />
 
-          <span
-            role="status"
-            className={`font-brand-body text-sm font-semibold uppercase tracking-wide ${config.textClassName}`}
+            <span
+              role="status"
+              className={`font-brand-body text-sm font-semibold uppercase tracking-wide ${config.textClassName}`}
+            >
+              {config.label}
+            </span>
+          </div>
+          <p
+            className={
+              config.label === "Blue flag"
+                ? "text-emerald-800 ms-4 font-medium"
+                : "text-red-500 font-medium ms-4"
+            }
           >
-            {config.label}
-          </span>
+            {config.label === "Blue flag" ? "Open now" : "Closed"}
+          </p>
         </div>
       </div>
 
-      <div>
+      {/* <div>
         <p className="font-brand-body text-sm text-brand-secondary">
           Last update
         </p>
@@ -220,7 +208,7 @@ export function SeaFlagRealtime({
             {formatLastUpdated(data.updated_at)}
           </span>
         </div>
-      </div>
+      </div> */}
     </div>
   );
 }

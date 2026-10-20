@@ -3,6 +3,7 @@ export interface BeachAccessMethod {
   per: "Per Week" | "Per Day";
   price: number;
   title: string;
+  link:string | null;
   description: string;
 }
 

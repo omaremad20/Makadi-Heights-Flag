@@ -21,7 +21,7 @@ export function MealSchedule({
         id="dining-heading"
         className="font-brand-heading text-2xl text-brand-primary"
       >
-        Dining today
+        Dining today at main restaurant
       </h2>
 
       <div
