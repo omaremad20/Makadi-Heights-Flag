@@ -23,6 +23,7 @@ type BeachDraft = {
   price: string;
   title: string;
   description: string;
+  link?: string | null;
 };
 type SlotDraft = {
   id: string;
@@ -54,9 +55,10 @@ function toDraft(c: HotelContent): Draft {
     beach: c.beach_access_methods.map((m) => ({
       id: m.id,
       per: m.per,
-      price: String(m.price),
+      price: m.price != null ? String(m.price) : "",
       title: m.title,
       description: m.description,
+      link: m.link ?? null,
     })),
     aquaPrice: String(c.aquapark.price),
     slots: c.aquapark.schedule.map((s) => ({
@@ -79,7 +81,14 @@ function toDraft(c: HotelContent): Draft {
 
 function toPayload(d: Draft) {
   return {
-    beach_access_methods: d.beach.map((m) => ({ ...m, price: num(m.price) })),
+    beach_access_methods: d.beach.map((m) => ({
+      id: m.id,
+      title: m.title,
+      description: m.description,
+      per: m.per,
+      price: m.price.trim() === "" ? null : num(m.price),
+      link: m.link ? m.link.trim() : null,
+    })),
     aquapark: {
       price: num(d.aquaPrice),
       schedule: d.slots.map((s) =>
@@ -257,6 +266,17 @@ export function HotelContentForm({
                         value={m.description}
                         aria-invalid={!!errors[`${k}.description`]}
                         onChange={(e) => set({ description: e.target.value })}
+                      />
+                    </Field>
+                    <Field
+                      label="Price list link (optional)"
+                      error={errors[`${k}.link`]}
+                    >
+                      <Input
+                        value={m.link ?? ""}
+                        placeholder="https://..."
+                        aria-invalid={!!errors[`${k}.link`]}
+                        onChange={(e) => set({ link: e.target.value.trim() || null })}
                       />
                     </Field>
                   </CardContent>

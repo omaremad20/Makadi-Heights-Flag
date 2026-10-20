@@ -58,6 +58,9 @@ const rowSchema = z.looseObject({
   updated_at: z.string().nullish(),
   created_by_email_snapshot: z.string().nullish(),
   last_updated_by_email_snapshot: z.string().nullish(),
+  beach_access_methods: z.unknown().optional(),
+  aquapark: z.unknown().optional(),
+  dining: z.unknown().optional(),
 });
 
 function toHotel(row: unknown): Hotel {

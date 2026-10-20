@@ -1,6 +1,6 @@
 "use client";
 
-import { Hotel, UserRound, Users, Waves, type LucideIcon } from "lucide-react";
+import { Folder, Hotel, UserRound, Users, Waves, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -27,6 +27,7 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   { title: "Sea", href: "/dashboard/sea", icon: Waves },
   { title: "Hotels", href: "/dashboard/hotels", icon: Hotel },
+  { title: "Applications", href: "/dashboard/applications", icon: Folder },
   { title: "Profiles", href: "/dashboard/profiles", icon: Users },
   { title: "My Profile", href: "/dashboard/my-profile", icon: UserRound },
 ];

@@ -1,9 +1,9 @@
 export interface BeachAccessMethod {
-  id: "membership" | "ticket" | "payment";
-  per: "Per Week" | "Per Day";
-  price: number;
+  id: string;
+  per: string;
+  price: number | null;
   title: string;
-  link:string | null;
+  link: string | null;
   description: string;
 }
 

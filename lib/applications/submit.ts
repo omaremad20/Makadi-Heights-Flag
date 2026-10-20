@@ -22,7 +22,7 @@ export async function submitApplication(values: ApplicationFormValues): Promise<
     };
     const { error } = await getGuestClient()
       .from("applications")
-      .insert(checked.value);
+      .insert(payload);
     if (!error) return { ok: true };
 
     console.error("Application insert failed", error.code, error.message);

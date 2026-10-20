@@ -36,7 +36,8 @@ function uniqueIds(items: { id: string }[], ctx: IssueCtx) {
 export const beachMethodSchema = z.looseObject({
   id: required("ID"),
   per: required("Billing period"),
-  price,
+  price: price.nullable().optional(),
+  link: z.string().nullable().optional(),
   title: required("Title"),
   description: required("Description"),
 });

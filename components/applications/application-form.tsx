@@ -139,7 +139,6 @@ export function ApplicationForm() {
     register,
     handleSubmit,
     reset,
-    getValues,
     formState: { errors, isSubmitting, isDirty },
   } = methods;
 

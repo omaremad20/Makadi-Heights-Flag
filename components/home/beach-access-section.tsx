@@ -1,7 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { BeachAccessMethod } from "@/lib/types";
 import {
-  Calculator,
   CreditCard,
   FileText,
   IdCard,
@@ -41,12 +40,12 @@ export function BeachAccessSection({
             >
               <CardContent className="flex flex-col gap-3 px-6 py-6">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-primary/15">
-                  {id === "membership" ? (
+                  {id.toLowerCase().includes("membership") ? (
                     <IdCard
                       aria-hidden="true"
                       className="h-5 w-5 text-brand-primary"
                     />
-                  ) : id === "ticket" ? (
+                  ) : id.toLowerCase().includes("ticket") ? (
                     <Ticket
                       aria-hidden="true"
                       className="h-5 w-5 text-brand-primary"
@@ -64,21 +63,21 @@ export function BeachAccessSection({
                 <p className="font-brand-body text-sm text-brand-secondary/80">
                   {description}
                 </p>
-                {price && (
+                {price != null && (
                   <p className="font-brand-body font-medium text-sm text-brand-secondary/80">
                     {price}
-                    {"EGP "}
+                    {" EGP "}
                     {per}
                   </p>
                 )}
               </CardContent>
-              {id.includes("membership") && (
+              {link && (
                 <div className=" justify-end gap-2 flex">
                   <Link
                     aria-label="See the price list"
                     title="See the price list"
                     target="_blank"
-                    href={link!}
+                    href={link}
                   >
                     <Button
                       variant={"outline"}

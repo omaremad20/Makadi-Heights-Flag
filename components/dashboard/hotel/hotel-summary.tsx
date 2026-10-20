@@ -67,9 +67,18 @@ export function HotelSummary({ hotel, modifyHref }: { hotel: Hotel; modifyHref: 
                 <CardTitle className="text-base">{m.title}</CardTitle>
                 <CardDescription>{m.description}</CardDescription>
               </CardHeader>
-              <CardContent>
-                <p className="text-lg font-semibold">{money(m.price)}</p>
+              <CardContent className="space-y-2">
+                <p className="text-lg font-semibold">
+                  {m.price != null ? money(m.price) : (m.link ? "Membership" : "Free / Included")}
+                </p>
                 <p className="text-xs text-muted-foreground">{m.per}</p>
+                {m.link && (
+                  <Button asChild variant="outline" size="sm" className="mt-2 text-xs">
+                    <a href={m.link} target="_blank" rel="noopener noreferrer">
+                      <FileText className="h-3.5 w-3.5 mr-1" /> View price list PDF <ExternalLink className="h-3 w-3 ml-1" />
+                    </a>
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ))}
