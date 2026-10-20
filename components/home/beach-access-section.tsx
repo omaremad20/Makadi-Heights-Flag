@@ -1,6 +1,13 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { BeachAccessMethod } from "@/lib/types";
-import { Calculator, CreditCard, FileText, IdCard, Pen, Ticket } from "lucide-react";
+import {
+  Calculator,
+  CreditCard,
+  FileText,
+  IdCard,
+  Pen,
+  Ticket,
+} from "lucide-react";
 import { Button } from "../ui/button";
 import Link from "next/link";
 
@@ -88,10 +95,13 @@ export function BeachAccessSection({
         )}
       </div>
       <div className="flex items-center py-3 justify-start gap-3">
-        <Link href={'/application-form'}>
-        <Button className="rounded-full! py-7! px-3.5! cursor-pointer " ><Pen/> Fill out the form</Button>
+        <Link href={"/application-form"}>
+          <Button className="rounded-full! py-7! px-3.5! cursor-pointer ">
+            <Pen />
+            Fill out the clubhouse form
+          </Button>
         </Link>
-        <Button className="rounded-full! py-7! px-3.5! cursor-pointer " variant={'outline'}> <Calculator/> Calculate my membership</Button>
+        {/* <Button className="rounded-full! py-7! px-3.5! cursor-pointer " variant={'outline'}> <Calculator/> Calculate my membership</Button> */}
       </div>
     </section>
   );
