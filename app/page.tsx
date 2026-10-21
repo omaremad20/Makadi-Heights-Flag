@@ -34,6 +34,16 @@ export default async function Page() {
 
   return (
     <main className="mx-auto flex min-h-full w-[95%] sm:w-[90%] flex-col gap-10 py-10">
+      <div className="space-y-2">
+        <p className="text-lg font-semibold text-[#2D6867]">
+          Dear Valued Client,
+        </p>
+
+        <p className="text-sm leading-5 text-gray-600">
+          Warm greetings from Makadi Heights Community Management! We're delighted to
+          welcome you and share the following information to enhance your experience.
+        </p>
+      </div>
       <div className="grid">
         <Suspense fallback={<SeaConditionsCardSkeleton />}>
           <SeaConditionsCard

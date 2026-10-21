@@ -26,7 +26,6 @@ export const PERIOD_LABELS: Record<Period, string> = {
 /** Supported membership types and user-friendly labels. */
 export const MEMBERSHIP_TYPE_LABELS: Record<MembershipType, string> = {
   clubhouse_only: "Clubhouse Only",
-  beach_only: "Beach Only (Min. 2 people)",
   clubhouse_and_beach: "Clubhouse & Beach",
 };
 
@@ -60,7 +59,6 @@ export const applicationFormSchema = z
     user_type: z.union([z.enum(USER_TYPES), z.literal("")]),
     full_name: z.string(),
     unit_number: z.string(),
-    date_of_birth: z.string(),
     mobile: z.string(),
     email: z.string(),
     nationality: z.string(),
@@ -79,11 +77,11 @@ export const applicationFormSchema = z
 
     // On top of the DB's E.164 shape rule: the number must be a real number for its country.
     const phones: [string, string][] = [
-      ["mobile", payload.mobile],
-      ["partner_mobile", payload.partner_mobile],
+      ["mobile", payload.mobile || ""],
+      ["partner_mobile", payload.partner_mobile || ""],
       ...payload.additional_persons.map((p, i): [string, string] => [
         `additional_persons[${i}].mobile`,
-        p.mobile,
+        p.mobile || "",
       ]),
     ];
     for (const [field, value] of phones) {
@@ -119,7 +117,6 @@ export function toApplicationPayload(v: ApplicationFormValues) {
     user_type: v.user_type === "" ? null : v.user_type,
     full_name: v.full_name,
     unit_number: v.unit_number,
-    date_of_birth: v.date_of_birth,
     mobile: normalizePhone(v.mobile),
     email: v.email,
     nationality: v.nationality,
@@ -181,18 +178,12 @@ function messageFor(field: string, code: string): string {
       return "This membership period is currently unavailable.";
     case "invalid_email":
       return "Enter a valid email address.";
-    case "invalid_date":
-      return "Enter a valid date.";
-    case "too_early":
-      return "The date must be on or after 1 January 1900.";
-    case "in_future":
-      return "Date of birth can’t be in the future.";
+    case "partner_name_required":
+      return "Partner’s name is required if other partner details are provided.";
     case "too_many":
       return `You can add up to ${MAX_ADDITIONAL_PERSONS} additional people.`;
     case "too_many_people":
       return `Total headcount cannot exceed ${MAX_TOTAL_HEADCOUNT} people.`;
-    case "beach_only_min_people":
-      return "Beach-only membership requires at least two people.";
     case "invalid_value":
       return "Choose one of the available options.";
     default:

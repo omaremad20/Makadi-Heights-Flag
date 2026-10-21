@@ -71,10 +71,36 @@ export function prepareClubhouseFormData(app: Application) {
     PartnerMobile: app.partner_mobile || "",
     PartnerEmail: app.partner_email || "",
 
-    // Additional Persons (Single cell, hyphenated, no mobile numbers in name string)
-    AddName1: additionalNamesStr,
-    AddRelative1: additionalRelativesStr,
-    AddMobile1: "",
+    // Additional Persons: populate AddName1, AddName2, AddName3 column-by-column (0, 1, 2)
+    AddName1:
+      (app.additional_persons?.[0]?.name as string) ||
+      (app.additional_persons?.[0]?.fullName as string) ||
+      additionalNamesStr,
+    AddRelative1:
+      (app.additional_persons?.[0]?.relative as string) ||
+      (app.additional_persons?.[0]?.relation as string) ||
+      additionalRelativesStr,
+    AddMobile1: (app.additional_persons?.[0]?.mobile as string) || "",
+
+    AddName2:
+      (app.additional_persons?.[1]?.name as string) ||
+      (app.additional_persons?.[1]?.fullName as string) ||
+      "",
+    AddRelative2:
+      (app.additional_persons?.[1]?.relative as string) ||
+      (app.additional_persons?.[1]?.relation as string) ||
+      "",
+    AddMobile2: (app.additional_persons?.[1]?.mobile as string) || "",
+
+    AddName3:
+      (app.additional_persons?.[2]?.name as string) ||
+      (app.additional_persons?.[2]?.fullName as string) ||
+      "",
+    AddRelative3:
+      (app.additional_persons?.[2]?.relative as string) ||
+      (app.additional_persons?.[2]?.relation as string) ||
+      "",
+    AddMobile3: (app.additional_persons?.[2]?.mobile as string) || "",
 
     SubmissionDate: app.created_at
       ? new Date(app.created_at).toLocaleDateString("en-GB")

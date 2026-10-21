@@ -32,13 +32,6 @@ export async function calculateApplicationPricing({
     return { ok: false, message: "Headcount must be between 1 and 22 people." };
   }
 
-  if (membershipType === "beach_only" && people < 2) {
-    return {
-      ok: false,
-      message: "Beach-only membership requires at least two people.",
-    };
-  }
-
   try {
     const { data, error } = await getGuestClient().rpc(
       "calculate_membership_price",
@@ -52,12 +45,6 @@ export async function calculateApplicationPricing({
 
     if (error) {
       console.warn("Pricing RPC error:", error.code, error.message);
-      if (error.message.includes("requires at least 2 people")) {
-        return {
-          ok: false,
-          message: "Beach-only membership requires at least two people.",
-        };
-      }
       if (error.message.includes("no price")) {
         return {
           ok: false,

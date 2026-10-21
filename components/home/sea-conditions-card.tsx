@@ -46,8 +46,8 @@ export async function SeaConditionsCard({
         {marineResult.status === "error" ||
         marineResult.status === "unavailable" ? (
           <>
-            <h1 className="font-brand-heading text-3xl leading-tight -ms-2 mb-3 font-semibold text-brand-primary sm:text-4xl">
-              {hotel!.name + " Alpha"}
+            <h1 className="font-brand-heading text-2xl leading-tight -ms-2 mb-3 font-semibold text-brand-primary sm:text-3xl">
+              {hotel!.name + " Alpha" + " Hotel"}
             </h1>
 
             <p className="font-brand-body text-brand-primary/80">
@@ -57,8 +57,8 @@ export async function SeaConditionsCard({
           </>
         ) : (
           <>
-            <h1 className="font-brand-heading text-3xl leading-tight -ms-2 mb-3 font-semibold text-brand-primary sm:text-4xl">
-              {hotel!.name + " Alpha"}
+            <h1 className="font-brand-heading text-2xl leading-tight -ms-2 mb-3 font-semibold text-brand-primary sm:text-3xl">
+              {hotel!.name + " Alpha" + " Hotel"}
             </h1>
 
             <p className="font-brand-heading text-5xl text-brand-primary">

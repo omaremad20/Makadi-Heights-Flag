@@ -20,10 +20,11 @@ export interface Application {
   period: ApplicationPeriod;
   full_name: string;
   unit_number: string;
-  date_of_birth: string;
-  mobile: string;
-  email: string;
-  nationality: string;
+  date_of_birth?: string | null;
+  persons_count: number;
+  mobile: string | null;
+  email: string | null;
+  nationality: string | null;
   partner_name: string | null;
   partner_nationality: string | null;
   partner_mobile: string | null;

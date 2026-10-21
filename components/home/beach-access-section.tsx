@@ -36,8 +36,10 @@ export function BeachAccessSection({
           ({ id, title, description, price, per, link }) => (
             <Card
               key={id}
-              className="flex justify-between w-80 shrink-0 snap-start flex-col gap-3 rounded-2xl border border-brand-primary/15 bg-white p-3 shadow-[0_1px_3px_rgba(45,104,103,0.08)]"
+              className="relative flex w-80 shrink-0 snap-start flex-col justify-between gap-3 rounded-2xl border border-brand-primary/15 bg-white p-3 shadow-[0_1px_3px_rgba(45,104,103,0.08)]"
             >
+
+
               <CardContent className="flex flex-col gap-3 px-6 py-6">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-primary/15">
                   {id.toLowerCase().includes("membership") ? (
@@ -57,31 +59,43 @@ export function BeachAccessSection({
                     />
                   )}
                 </div>
+
                 <p className="font-brand-body font-medium text-brand-secondary">
                   {title}
                 </p>
+
                 <p className="font-brand-body text-sm text-brand-secondary/80">
                   {description}
                 </p>
+                {(
+                  id === "membership" ||
+                  id === "clubhouse_only_membership"
+                ) && (
+                    <span className="  py-1 text-xs font-semibold text-brand-primary">
+                      {id === "membership"
+                        ? "Pack for 2 & Additionals"
+                        : "Pack for 2 Clubhouse Only, Pack for 1 Clubhouse & Beach, + Additionals"}
+                    </span>
+                  )}
                 {price != null && (
-                  <p className="font-brand-body font-medium text-sm text-brand-secondary/80">
-                    {price}
-                    {" EGP "}
-                    {per}
+                  <p className="font-brand-body text-sm font-medium text-brand-secondary/80">
+                    {price} EGP {per}
                   </p>
                 )}
               </CardContent>
+
               {link && (
-                <div className=" justify-end gap-2 flex">
+                <div className="flex justify-end gap-2">
                   <Link
                     aria-label="See the price list"
                     title="See the price list"
                     target="_blank"
+                    rel="noopener noreferrer"
                     href={link}
                   >
                     <Button
-                      variant={"outline"}
-                      className="p-2 cursor-pointer rounded-full!"
+                      variant="outline"
+                      className="cursor-pointer rounded-full! p-2"
                     >
                       See the price list
                       <FileText />

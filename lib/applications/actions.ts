@@ -7,14 +7,14 @@ import { createClient } from '../supabase/server';
 const ITEMS_PER_PAGE = 20;
 
 export async function getApplicationsStats() {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   // We use multiple count queries for efficiency
   const statuses = ['pending', 'approved', 'rejected', 'cancelled'];
   const stats: Record<string, number> = { total: 0 };
 
   for (const status of statuses) {
-    const { count, error } = await (await supabase)
+    const { count, error } = await supabase
       .from('applications')
       .select('*', { count: 'exact', head: true })
       .eq('status', status);
@@ -33,11 +33,11 @@ export async function getApplications({
   status = 'all',
   limit = ITEMS_PER_PAGE
 }) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const from = (page - 1) * limit;
   const to = from + limit - 1;
 
-  let query = (await supabase)
+  let query = supabase
     .from('applications')
     .select('*', { count: 'exact' })
     .order('created_at', { ascending: false });
@@ -56,7 +56,7 @@ export async function getApplications({
   if (error) throw new Error(error.message);
 
   return {
-    applications: data,
+    applications: data || [],
     totalCount: count || 0,
     totalPages: Math.ceil((count || 0) / limit)
   };
@@ -109,7 +109,7 @@ export async function updateApplicationStatus(
       console.error("Admin profile lookup failed:", profileError.message);
       return {
         success: false,
-        error: "Could not verify your permissions.",
+        error: "Could not verify your permissions: " + profileError.message,
       };
     }
 
@@ -121,22 +121,30 @@ export async function updateApplicationStatus(
     ) {
       return {
         success: false,
-        error: "You are not authorized to update application statuses.",
+        error: "You are not authorized to update application statuses. Admin access is required.",
       };
     }
 
+    // Send ONLY the business field `status`.
+    // Audit columns and timestamps (updated_at, status_updated_by, etc.)
+    // are automatically handled by the database triggers and policies.
     const { data, error } = await supabase
       .from("applications")
       .update({
         status: newStatus,
-        updated_at: new Date().toISOString(),
       })
       .eq("id", id)
       .select("id, status")
       .maybeSingle();
 
     if (error) {
-      console.error("Application status update failed:", error.message);
+      console.error("Application status update failed:", error.message, error.code);
+      if (error.code === "42501") {
+        return {
+          success: false,
+          error: "Permission denied: Database policy does not permit updating this application.",
+        };
+      }
       return { success: false, error: error.message };
     }
 
@@ -144,7 +152,7 @@ export async function updateApplicationStatus(
       return {
         success: false,
         error:
-          "No application was updated. Check the application ID and database permissions.",
+          "No application was updated. Check that the application ID exists.",
       };
     }
 
@@ -168,8 +176,8 @@ export async function updateApplicationStatus(
 }
 
 export async function exportApplicationsCsv() {
-  const supabase = createClient();
-  const { data, error } = await (await supabase)
+  const supabase = await createClient();
+  const { data, error } = await supabase
     .from('applications')
     .select('*')
     .order('created_at', { ascending: false });
@@ -178,7 +186,7 @@ export async function exportApplicationsCsv() {
 
   // CSV Generation logic
   const headers = ['ID', 'Date', 'Name', 'Unit', 'Status', 'Email', 'Mobile', 'Type'];
-  const rows = data.map(app => [
+  const rows = (data || []).map(app => [
     app.id,
     new Date(app.created_at).toLocaleDateString(),
     `"${app.full_name}"`,

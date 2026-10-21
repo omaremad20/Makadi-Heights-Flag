@@ -13,8 +13,29 @@ export default async function ApplicationsPage({
 
   const [stats, { applications, totalCount, totalPages }] = await Promise.all([
     getApplicationsStats(),
-    getApplications({ page, search, status })
+    getApplications({ page, search, status }),
   ]);
+
+  const { createClient } = await import('@/lib/supabase/server');
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  let adminName = "Community Office";
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('full_name, email')
+      .eq('id', user.id)
+      .maybeSingle();
+    adminName =
+      profile?.full_name?.trim() ||
+      user?.user_metadata?.full_name?.trim() ||
+      user?.user_metadata?.name?.trim() ||
+      user.email ||
+      "Community Office";
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -33,6 +54,7 @@ export default async function ApplicationsPage({
         currentPage={page}
         currentSearch={search}
         currentStatus={status}
+        currentAdminName={adminName}
       />
     </div>
   );

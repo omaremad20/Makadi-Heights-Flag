@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import {
   Search,
@@ -9,7 +9,8 @@ import {
   ChevronRight,
   X,
   Loader2,
-  FileDown,
+  FileCheck,
+  Printer,
 } from "lucide-react";
 import { updateApplicationStatus } from "@/lib/applications/actions";
 import { Application, ApplicationStatus } from "@/lib/types/applications";
@@ -22,6 +23,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 interface ApplicationsClientProps {
   initialApplications: Application[];
@@ -31,6 +33,7 @@ interface ApplicationsClientProps {
   currentPage: number;
   currentSearch: string;
   currentStatus: string;
+  currentAdminName?: string;
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -57,6 +60,7 @@ export default function ApplicationsClient({
   currentPage,
   currentSearch,
   currentStatus,
+  currentAdminName,
 }: ApplicationsClientProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -64,14 +68,33 @@ export default function ApplicationsClient({
   const [isPending, startTransition] = useTransition();
 
   // States
+  const [applications, setApplications] =
+    useState<Application[]>(initialApplications);
+  const [currentStats, setCurrentStats] =
+    useState<Record<string, number>>(stats);
   const [selectedApp, setSelectedApp] = useState<Application | null>(null);
   const [draftSearch, setDraftSearch] = useState(currentSearch || "");
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [withDigitalSignatures, setWithDigitalSignatures] = useState(true);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+  // Sync state with props during render without triggering cascading effect renders
+  const [prevApps, setPrevApps] = useState(initialApplications);
+  if (prevApps !== initialApplications) {
+    setPrevApps(initialApplications);
+    setApplications(initialApplications);
+  }
+
+  const [prevStats, setPrevStats] = useState(stats);
+  if (prevStats !== stats) {
+    setPrevStats(stats);
+    setCurrentStats(stats);
+  }
+
+  const [prevSearch, setPrevSearch] = useState(currentSearch || "");
+  if (prevSearch !== (currentSearch || "")) {
+    setPrevSearch(currentSearch || "");
     setDraftSearch(currentSearch || "");
-  }, [currentSearch]);
+  }
 
   // --- Search Logic ---
   const executeSearch = (term: string) => {
@@ -145,9 +168,15 @@ export default function ApplicationsClient({
       const result = await updateApplicationStatus(id, newStatus);
 
       if (!result.success) {
-        alert(`Failed to update status: ${result.error}`);
+        toast.error(`Failed to update status: ${result.error}`);
         return;
       }
+
+      setApplications((prev) =>
+        prev.map((app) =>
+          app.id === id ? { ...app, status: result.status } : app,
+        ),
+      );
 
       setSelectedApp((current) =>
         current?.id === id
@@ -155,7 +184,17 @@ export default function ApplicationsClient({
           : current,
       );
 
-      alert("Status updated successfully.");
+      const prevApp = applications.find((a) => a.id === id);
+      const prevStatus = prevApp?.status;
+      if (prevStatus && prevStatus !== result.status) {
+        setCurrentStats((prev) => ({
+          ...prev,
+          [prevStatus]: Math.max(0, (prev[prevStatus] || 0) - 1),
+          [result.status]: (prev[result.status] || 0) + 1,
+        }));
+      }
+
+      toast.success(`Application marked as ${result.status}.`);
       router.refresh();
     } catch (error: unknown) {
       const message =
@@ -163,37 +202,55 @@ export default function ApplicationsClient({
           ? error.message
           : "An unexpected error occurred.";
 
-      alert(`Failed to update status: ${message}`);
+      toast.error(`Failed to update status: ${message}`);
     } finally {
       setUpdatingStatusId(null);
     }
   };
 
-  // --- Individual Document Download Handler ---
-  const handleIndividualDownload = async (app: Application) => {
+  // --- Individual Document Download Handler (Approved vs Unapproved) ---
+  const handleIndividualDownload = async (
+    app: Application,
+    isApprovedDownload: boolean = withDigitalSignatures,
+  ) => {
+    const actionKey = `${app.id}-${isApprovedDownload ? "approved" : "unapproved"}`;
     if (downloadingId) return;
 
     try {
-      setDownloadingId(app.id);
+      setDownloadingId(actionKey);
 
       // Generate the official PDF populated with this application's actual data
-      const result = await generateApplicationPdf(app);
+      const result = await generateApplicationPdf(app, null, {
+        isExternalUserView: false,
+        includeDigitalSignatures: isApprovedDownload,
+        approvedByName: isApprovedDownload
+          ? currentAdminName ||
+            app.status_updated_by_email_snapshot ||
+            "Community Management Office"
+          : null,
+      });
 
       // Trigger browser download of the PDF
       const url = result.url || window.URL.createObjectURL(result.blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = result.filename;
+      const suffix = isApprovedDownload ? "_Approved" : "_Unapproved";
+      link.download = result.filename.replace(".pdf", `${suffix}.pdf`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       if (!result.url) {
         window.URL.revokeObjectURL(url);
       }
+      toast.success(
+        isApprovedDownload
+          ? `Downloaded approved application (${currentAdminName || "Community Office"})`
+          : "Downloaded unapproved application",
+      );
     } catch (error: unknown) {
       console.error("Document Rendering Error:", error);
       const msg = error instanceof Error ? error.message : "Unknown error occurred";
-      alert(`Failed to generate application PDF: ${msg}`);
+      toast.error(`Failed to generate application PDF: ${msg}`);
     } finally {
       setDownloadingId(null);
     }
@@ -212,14 +269,14 @@ export default function ApplicationsClient({
             <p className="text-sm text-gray-500 capitalize">
               {stat} Applications
             </p>
-            <p className="text-2xl font-bold">{stats[stat]}</p>
+            <p className="text-2xl font-bold">{currentStats[stat] ?? 0}</p>
           </div>
         ))}
       </div>
 
       {/* Controls */}
-      <div className="flex flex-col sm:flex-row justify-between gap-4 bg-white p-4 rounded-lg border shadow-sm">
-        <div className="flex flex-col sm:flex-row gap-4 flex-1">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-lg border shadow-sm">
+        <div className="flex flex-col sm:flex-row gap-4 flex-1 w-full md:w-auto">
           <div className="relative flex flex-1 max-w-lg gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -262,6 +319,23 @@ export default function ApplicationsClient({
             <option value="cancelled">Cancelled</option>
           </select>
         </div>
+
+        {/* Admin Signature Export Toggle */}
+        <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-neutral-200 bg-neutral-50/80 text-xs">
+          <input
+            id="toggle-digital-sigs"
+            type="checkbox"
+            checked={withDigitalSignatures}
+            onChange={(e) => setWithDigitalSignatures(e.target.checked)}
+            className="rounded border-neutral-300 text-blue-600 focus:ring-blue-500 size-4 cursor-pointer"
+          />
+          <label htmlFor="toggle-digital-sigs" className="cursor-pointer select-none font-medium text-neutral-800">
+            Export PDF with digital signatures
+          </label>
+          <span className="text-neutral-500 text-[11px] hidden lg:inline">
+            {withDigitalSignatures ? "(Official sign-off)" : "(Blank line for physical print)"}
+          </span>
+        </div>
       </div>
 
       {/* Table */}
@@ -286,14 +360,14 @@ export default function ApplicationsClient({
                   <Loader2 className="animate-spin text-blue-600 h-8 w-8" />
                 </div>
               )}
-              {initialApplications.length === 0 ? (
+              {applications.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="p-8 text-center text-gray-500">
                     No applications found matching your criteria.
                   </td>
                 </tr>
               ) : (
-                initialApplications.map((app: Application) => (
+                applications.map((app: Application) => (
                   <tr key={app.id} className="hover:bg-gray-50">
                     <td className="p-4">
                       <p className="font-medium text-gray-900">
@@ -318,26 +392,42 @@ export default function ApplicationsClient({
                       <StatusBadge status={app.status} />
                     </td>
                     <td className="p-4 text-right">
-                      <div className="flex items-center justify-end gap-3">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {/* Option 1: Download Approved Application (Community Approval) */}
                         <button
-                          onClick={() => handleIndividualDownload(app)}
-                          disabled={downloadingId === app.id}
-                          className="text-gray-600 hover:text-blue-600 flex items-center gap-1 disabled:opacity-50"
-                          title="Download Application Form"
+                          onClick={() => handleIndividualDownload(app, true)}
+                          disabled={Boolean(downloadingId)}
+                          className="text-blue-600 hover:text-blue-800 p-1.5 rounded-md hover:bg-blue-50 transition-colors disabled:opacity-50"
+                          title={`Download Approved Application (${currentAdminName || "Community Office"})`}
                         >
-                          {downloadingId === app.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                          {downloadingId === `${app.id}-approved` ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
                           ) : (
-                            <FileDown className="h-4 w-4" />
+                            <FileCheck className="h-4 w-4 text-blue-600" />
                           )}
-                          <span className="sr-only">Download</span>
+                          <span className="sr-only">Download Approved Application</span>
+                        </button>
+
+                        {/* Option 2: Download Unapproved Application */}
+                        <button
+                          onClick={() => handleIndividualDownload(app, false)}
+                          disabled={Boolean(downloadingId)}
+                          className="text-neutral-500 hover:text-neutral-800 p-1.5 rounded-md hover:bg-neutral-100 transition-colors disabled:opacity-50"
+                          title="Download Unapproved Application"
+                        >
+                          {downloadingId === `${app.id}-unapproved` ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-neutral-600" />
+                          ) : (
+                            <Printer className="h-4 w-4 text-neutral-600" />
+                          )}
+                          <span className="sr-only">Download Unapproved Application</span>
                         </button>
 
                         <button
                           onClick={() => setSelectedApp(app)}
-                          className="text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                          className="text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1 text-xs px-2 py-1 rounded hover:bg-blue-50 transition-colors ml-1"
                         >
-                          <Eye className="h-4 w-4" /> Review
+                          <Eye className="h-3.5 w-3.5" /> Review
                         </button>
                       </div>
                     </td>
@@ -513,25 +603,43 @@ export default function ApplicationsClient({
               </div>
             </div>
 
-            <div className="flex justify-between pt-3 border-t">
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t">
               <Button
                 variant="outline"
                 onClick={() => setSelectedApp(null)}
               >
                 Close
               </Button>
-              <Button
-                onClick={() => handleIndividualDownload(selectedApp)}
-                disabled={downloadingId === selectedApp.id}
-                className="gap-2"
-              >
-                {downloadingId === selectedApp.id ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <FileDown className="h-4 w-4" />
-                )}
-                Download Application PDF
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Download Unapproved Application */}
+                <Button
+                  variant="outline"
+                  onClick={() => handleIndividualDownload(selectedApp, false)}
+                  disabled={Boolean(downloadingId)}
+                  className="gap-2 text-xs"
+                >
+                  {downloadingId === `${selectedApp.id}-unapproved` ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Printer className="h-3.5 w-3.5 text-neutral-600" />
+                  )}
+                  Download Unapproved Application
+                </Button>
+
+                {/* Download Approved Application */}
+                <Button
+                  onClick={() => handleIndividualDownload(selectedApp, true)}
+                  disabled={Boolean(downloadingId)}
+                  className="gap-2 text-xs bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  {downloadingId === `${selectedApp.id}-approved` ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <FileCheck className="h-3.5 w-3.5" />
+                  )}
+                  Download Approved Application
+                </Button>
+              </div>
             </div>
           </DialogContent>
         </Dialog>

@@ -28,7 +28,6 @@ export const USER_TYPES = [
 
 export const MEMBERSHIP_TYPES = [
   "clubhouse_only",
-  "beach_only",
   "clubhouse_and_beach",
 ] as const;
 
@@ -52,10 +51,9 @@ export interface ApplicationInput {
   user_type: UserType | null;
   full_name: string;
   unit_number: string;
-  date_of_birth: string; // YYYY-MM-DD
-  mobile: string; // E.164
-  email: string;
-  nationality: string;
+  mobile: string | null; // E.164 (optional)
+  email: string | null; // optional
+  nationality: string | null; // optional
   partner_name: string | null;
   partner_nationality: string | null;
   partner_mobile: string | null;
@@ -85,7 +83,6 @@ const ALLOWED_KEYS = new Set([
   "user_type",
   "full_name",
   "unit_number",
-  "date_of_birth",
   "mobile",
   "email",
   "nationality",
@@ -147,24 +144,6 @@ function plain(v: string, min: number, max: number): string {
   return v;
 }
 
-function validDate(v: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
-  if (!m) throw new FieldError("invalid_date");
-  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  const dt = new Date(Date.UTC(y, mo - 1, d));
-  if (
-    dt.getUTCFullYear() !== y ||
-    dt.getUTCMonth() !== mo - 1 ||
-    dt.getUTCDate() !== d
-  ) {
-    throw new FieldError("invalid_date");
-  }
-  if (v < "1900-01-01") throw new FieldError("too_early");
-  if (v > new Date().toISOString().slice(0, 10))
-    throw new FieldError("in_future");
-  return v;
-}
-
 export function validateApplication(body: unknown): ValidationResult {
   const errors: Record<string, string> = {};
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
@@ -219,14 +198,9 @@ export function validateApplication(body: unknown): ValidationResult {
   const unit_number = run("unit_number", () =>
     plain(required(text(src.unit_number)), 3, 32),
   );
-  const date_of_birth = run("date_of_birth", () =>
-    validDate(required(text(src.date_of_birth))),
-  );
-  const mobile = run("mobile", () => phone(required(text(src.mobile))));
-  const emailV = run("email", () => email(required(text(src.email))));
-  const nationality = run("nationality", () =>
-    plain(required(text(src.nationality)), 1, 64),
-  );
+  const mobile = opt("mobile", phone);
+  const emailV = opt("email", email);
+  const nationality = opt("nationality", (s) => plain(s, 1, 64));
 
   const partner_name = opt("partner_name", (s) => name(s, 3, 64));
   const partner_nationality = opt("partner_nationality", (s) =>
@@ -234,6 +208,11 @@ export function validateApplication(body: unknown): ValidationResult {
   );
   const partner_mobile = opt("partner_mobile", phone);
   const partner_email = opt("partner_email", email);
+
+  // DB check constraint: applications_partner_requires_name_chk
+  if (!partner_name && (partner_nationality || partner_mobile || partner_email)) {
+    errors.partner_name = "partner_name_required";
+  }
 
   let additional_persons: AdditionalPerson[] | null = null;
   const ap = src.additional_persons;
@@ -289,10 +268,6 @@ export function validateApplication(body: unknown): ValidationResult {
     errors.additional_persons = "too_many_people";
   }
 
-  if (membershipTypeRaw === "beach_only" && totalHeadcount < 2) {
-    errors.membership_type = "beach_only_min_people";
-  }
-
   if (Object.keys(errors).length > 0) return { ok: false, errors };
 
   return {
@@ -303,10 +278,9 @@ export function validateApplication(body: unknown): ValidationResult {
       user_type: (userTypeRaw ?? null) as UserType | null,
       full_name: full_name!,
       unit_number: unit_number!,
-      date_of_birth: date_of_birth!,
-      mobile: mobile!,
-      email: emailV!,
-      nationality: nationality!,
+      mobile: mobile ?? null,
+      email: emailV ?? null,
+      nationality: nationality ?? null,
       partner_name,
       partner_nationality,
       partner_mobile,

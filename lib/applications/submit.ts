@@ -17,9 +17,15 @@ export async function submitApplication(values: ApplicationFormValues): Promise<
   }
 
   try {
+    const partnerCount = checked.value.partner_name ? 1 : 0;
+    const additionalCount = checked.value.additional_persons ? checked.value.additional_persons.length : 0;
+    const personsCount = 1 + partnerCount + additionalCount;
+
     const payload = {
       ...checked.value,
+      persons_count: personsCount,
     };
+
     const { error } = await getGuestClient()
       .from("applications")
       .insert(payload);

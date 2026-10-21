@@ -1,15 +1,12 @@
 "use client";
 
-import { useRef, type ComponentProps } from "react";
+import { type ComponentProps } from "react";
 import { useFieldArray, useFormContext } from "react-hook-form";
-import { Plus, Trash2 } from "lucide-react";
 
 import { CONTROL_CLASS, FormField } from "@/components/applications/form-field";
 import { PhoneField } from "@/components/applications/phone-field";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { ApplicationFormValues } from "@/lib/applications/form-schema";
-import { MAX_ADDITIONAL_PERSONS } from "@/lib/applications/vaildation";
 
 export function AdditionalPersons() {
   const {
@@ -17,13 +14,11 @@ export function AdditionalPersons() {
     register,
     formState: { errors },
   } = useFormContext<ApplicationFormValues>();
-  const { fields, append, remove } = useFieldArray({
+  const { fields } = useFieldArray({
     control,
     name: "additional_persons",
   });
-  const addButton = useRef<HTMLButtonElement>(null);
 
-  const atLimit = fields.length >= MAX_ADDITIONAL_PERSONS;
   const listError =
     errors.additional_persons?.root?.message ??
     errors.additional_persons?.message;
@@ -31,7 +26,7 @@ export function AdditionalPersons() {
   return (
     <div className="grid gap-4 sm:col-span-2">
       {fields.length === 0 && (
-        <p className="text-sm text-neutral-600">No additional people added.</p>
+        <p className="text-sm text-neutral-600">No additional members added.</p>
       )}
 
       {fields.length > 0 && (
@@ -43,7 +38,7 @@ export function AdditionalPersons() {
               <li key={field.id}>
                 <fieldset className="grid gap-4 rounded-lg border border-border p-4 sm:grid-cols-2">
                   <legend className="px-1 text-sm font-medium text-neutral-900">
-                    Person {n}
+                    Additional Member {n}
                   </legend>
 
                   <FormField
@@ -72,7 +67,7 @@ export function AdditionalPersons() {
                       <ControlInput
                         {...a11y}
                         autoComplete="off"
-                        placeholder="e.g. Son, Mother"
+                        placeholder="e.g. Son, Daughter, Brother"
                         {...register(`additional_persons.${index}.relative`)}
                       />
                     )}
@@ -85,21 +80,6 @@ export function AdditionalPersons() {
                     optional
                     className="sm:col-span-2"
                   />
-
-                  <div className="flex justify-end sm:col-span-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        remove(index);
-                        addButton.current?.focus();
-                      }}
-                    >
-                      <Trash2 aria-hidden="true" />
-                      Remove person {n}
-                    </Button>
-                  </div>
                 </fieldset>
               </li>
             );
@@ -108,27 +88,6 @@ export function AdditionalPersons() {
       )}
 
       {listError && <p className="text-sm text-destructive">{listError}</p>}
-
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          ref={addButton}
-          type="button"
-          variant="outline"
-          disabled={atLimit}
-          onClick={() =>
-            append(
-              { name: "", relative: "", mobile: "" },
-              { shouldFocus: true },
-            )
-          }
-        >
-          <Plus aria-hidden="true" />
-          Add a person
-        </Button>
-        <p className="text-sm text-neutral-600">
-          {fields.length} of {MAX_ADDITIONAL_PERSONS} added
-        </p>
-      </div>
     </div>
   );
 }
