@@ -40,7 +40,7 @@ export default async function Page() {
         </p>
 
         <p className="text-sm leading-5 text-gray-600">
-          Warm greetings from Makadi Heights Community Management! We're delighted to
+          Warm greetings from Makadi Heights Community Management! We&apos;re delighted to
           welcome you and share the following information to enhance your experience.
         </p>
       </div>

@@ -17,6 +17,8 @@ type Offer = {
   title: string;
   description: string;
   icon: LucideIcon;
+  discount: string;
+  discountNote: string;
 };
 
 const offers: Offer[] = [
@@ -24,8 +26,10 @@ const offers: Offer[] = [
     id: "spa",
     title: "Spa",
     description:
-      "Enjoy relaxing massages and wellness treatments at Serenity Hotels.",
+      "Enjoy relaxing massages and wellness treatments at Serenity Hotel.",
     icon: Sparkles,
+    discount: "20% OFF",
+    discountNote: "Exclusive owner discount",
   },
   {
     id: "day-use",
@@ -33,6 +37,8 @@ const offers: Offer[] = [
     description:
       "Enjoy the hotel's pools, beach, and facilities without an overnight stay.",
     icon: Sun,
+    discount: "10% OFF",
+    discountNote: "Exclusive owner discount",
   },
   {
     id: "restaurants",
@@ -40,25 +46,35 @@ const offers: Offer[] = [
     description:
       "Discover a variety of dining experiences and cuisines at the hotel's restaurants.",
     icon: UtensilsCrossed,
+    discount: "10%–20% OFF",
+    discountNote: "Depending on the restaurant",
   },
 ];
 
 const CARD_CLASSES =
   "flex h-[340px] w-[280px] shrink-0 snap-start flex-col border-brand-primary/15 bg-white shadow-sm transition-shadow hover:shadow-md sm:w-[300px]";
 
-function DiscountBadge() {
+function DiscountBadge({
+  discount,
+  note,
+}: {
+  discount: string;
+  note: string;
+}) {
   return (
     <div className="mt-auto flex items-center gap-2 rounded-xl border border-brand-primary/20 bg-brand-primary/5 px-3 py-3">
       <Tag
         aria-hidden="true"
         className="h-5 w-5 shrink-0 text-brand-primary"
       />
-      <div className="flex flex-col">
+
+      <div className="flex min-w-0 flex-col">
         <span className="font-brand-heading text-lg font-bold leading-tight text-brand-primary">
-          10% OFF
+          {discount}
         </span>
+
         <span className="font-brand-body text-xs text-brand-secondary">
-          Exclusive owner discount
+          {note}
         </span>
       </div>
     </div>
@@ -69,11 +85,9 @@ function OfferCard({
   title,
   description,
   icon: Icon,
-}: {
-  title: string;
-  description: string;
-  icon: LucideIcon;
-}) {
+  discount,
+  discountNote,
+}: Offer) {
   return (
     <Card className={CARD_CLASSES}>
       <CardContent className="flex h-full flex-col gap-4 p-5 sm:p-6">
@@ -92,12 +106,14 @@ function OfferCard({
 
         <div className="h-px w-full bg-brand-primary/10" />
 
-        {/* إضافة flex-1 هنا تضمن إن الـ Badge يتزق دائماً للأسفل بنفس المستوى */}
         <p className="flex-1 font-brand-body text-sm leading-6 text-brand-secondary/90">
           {description}
         </p>
 
-        <DiscountBadge />
+        <DiscountBadge
+          discount={discount}
+          note={discountNote}
+        />
       </CardContent>
     </Card>
   );
@@ -125,12 +141,12 @@ export function AquaParkSection({
 
           <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-primary px-3 py-1.5 font-brand-heading text-sm font-bold text-white">
             <Tag aria-hidden="true" className="h-4 w-4" />
-            10% OFF
+            Exclusive Discounts
           </span>
         </div>
 
         <p className="font-brand-body text-sm text-brand-secondary">
-          Enjoy exclusive discounts at Serenity Hotels.
+          Enjoy exclusive discounts at Serenity Hotel.
         </p>
 
         <p className="flex items-start gap-2 font-brand-body text-sm text-brand-secondary/80">
@@ -138,8 +154,11 @@ export function AquaParkSection({
             aria-hidden="true"
             className="mt-0.5 h-4 w-4 shrink-0 text-brand-primary"
           />
-          A valid Makadi Heights homeowner card is required. Ask Serenity
-          Hotels about applicable prices and offer details.
+
+          <span>
+            A valid Makadi Heights homeowner card is required. Ask Serenity
+            Hotel about applicable prices and offer details.
+          </span>
         </p>
       </div>
 
@@ -171,57 +190,51 @@ export function AquaParkSection({
               {aquapark.schedule.map((slot) => (
                 <div
                   key={slot.id}
-                  className={`flex flex-wrap items-center justify-between gap-x-2 gap-y-1 rounded-lg px-2.5 py-1.5 ${
-                    slot.is_break
-                      ? "border border-dashed border-brand-secondary/30"
-                      : "bg-brand-primary/5"
-                  }`}
+                  className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 rounded-lg px-2.5 py-2 ${slot.is_break
+                    ? "border border-dashed border-brand-secondary/30"
+                    : "bg-brand-primary/5"
+                    }`}
                 >
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex min-w-0 items-center gap-1.5">
                     <Clock
                       aria-hidden="true"
-                      className={`h-3.5 w-3.5 shrink-0 ${
-                        slot.is_break
-                          ? "text-brand-secondary/50"
-                          : "text-brand-primary"
-                      }`}
+                      className={`h-3.5 w-3.5 shrink-0 ${slot.is_break
+                        ? "text-brand-secondary/50"
+                        : "text-brand-primary"
+                        }`}
                     />
+
                     <span
-                      className={`font-brand-body text-[11px] ${
-                        slot.is_break
-                          ? "text-brand-secondary/60"
-                          : "font-medium text-brand-secondary"
-                      }`}
+                      className={`min-w-0 font-brand-body text-[11px] ${slot.is_break
+                        ? "text-brand-secondary/60"
+                        : "font-medium text-brand-secondary"
+                        }`}
                     >
                       {slot.label}
                     </span>
                   </div>
 
                   <span
-                    className={`font-brand-body text-[11px] ${
-                      slot.is_break
-                        ? "text-brand-secondary/60"
-                        : "font-medium text-brand-primary"
-                    }`}
+                    className={`whitespace-nowrap text-right font-brand-body text-[11px] ${slot.is_break
+                      ? "text-brand-secondary/60"
+                      : "font-medium text-brand-primary"
+                      }`}
                   >
-                    {formatTime(slot.start_time)} -{" "}
-                    {formatTime(slot.end_time)}
+                    {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
                   </span>
                 </div>
               ))}
             </div>
 
-            <DiscountBadge />
+            <DiscountBadge
+              discount="10% OFF"
+              note="Exclusive owner discount"
+            />
           </CardContent>
         </Card>
 
-        {offers.map(({ id, title, description, icon }) => (
-          <OfferCard
-            key={id}
-            title={title}
-            description={description}
-            icon={icon}
-          />
+        {offers.map((offer) => (
+          <OfferCard key={offer.id} {...offer} />
         ))}
       </div>
     </section>
