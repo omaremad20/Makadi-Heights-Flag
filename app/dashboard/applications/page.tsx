@@ -7,6 +7,7 @@ import { ApplicationsPagination } from "@/components/dashboard/applications/appl
 import {
   ApplicationsEmpty,
   ApplicationsLoadError,
+  ApplicationsPastEnd,
   ApplicationsTableSkeleton,
 } from "@/components/dashboard/applications/applications-states";
 import { ApplicationsTable } from "@/components/dashboard/applications/applications-table";
@@ -98,8 +99,10 @@ async function Results({ ctx, params, adminName }: { ctx: AdminContext; params: 
   }
 
   const pagination = getPagination(params, result.totalCount);
+  // Past the last page (edited URL, or rows changed): offer the real last page.
+  // (A redirect here would arrive after streaming started and not navigate.)
   if (result.rows.length === 0 && result.totalCount > 0) {
-    redirect(buildApplicationsHref(params, { page: pagination.totalPages }));
+    return <ApplicationsPastEnd href={buildApplicationsHref(params, { page: pagination.totalPages })} />;
   }
   if (result.rows.length === 0) return <ApplicationsEmpty filtered={hasActiveFilters(params)} />;
 

@@ -347,6 +347,8 @@ end $$;
 
 set role anon;
 do $$ begin
+  -- a full scan (no key filter) forces every policy expression to be evaluated
+  if (select count(*) from public.site_settings) < 1 then raise exception 'anon cannot list public settings'; end if;
   if (select value ->> 'path' from public.site_settings where key = 'menu') <> 'Menu_Serenity_2026.pdf' then
     raise exception 'anon cannot read public menu setting';
   end if;

@@ -56,3 +56,15 @@ export function ApplicationsEmpty({ filtered }: { filtered: boolean }) {
     </div>
   );
 }
+
+export function ApplicationsPastEnd({ href }: { href: string }) {
+  return (
+    <div className="flex flex-col items-center gap-3 rounded-lg border px-6 py-12 text-center">
+      <FolderSearch className="size-8 text-muted-foreground" aria-hidden />
+      <p className="font-medium">This page is past the end of the list</p>
+      <Button asChild variant="outline">
+        <Link href={href}>Go to the last page</Link>
+      </Button>
+    </div>
+  );
+}

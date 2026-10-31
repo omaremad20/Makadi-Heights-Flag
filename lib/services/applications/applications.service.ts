@@ -48,6 +48,16 @@ export async function listApplications(ctx: AdminContext, p: ApplicationListPara
     .range(fromRow, fromRow + p.pageSize - 1);
 
   const { data, count, error } = await query;
+  if (error?.code === "PGRST103") {
+    // Page past the end: PostgREST answers 416 without a count. Count separately
+    // so the page can offer the real last page.
+    const { count: total, error: countErr } = await applyListFilters(
+      ctx.supabase.from("applications").select("id", { count: "exact", head: true }),
+      p,
+    );
+    if (countErr) throw new Error(`applications count failed: ${countErr.code}`);
+    return { rows: [] as ApplicationRow[], totalCount: total ?? 0 };
+  }
   if (error) throw new Error(`applications list failed: ${error.code}`);
   return { rows: (data ?? []) as ApplicationRow[], totalCount: count ?? 0 };
 }

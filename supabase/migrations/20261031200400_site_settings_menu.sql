@@ -83,9 +83,16 @@ revoke all on public.site_settings from public, anon, authenticated;
 grant select (key, value, is_public, updated_at) on public.site_settings to anon, authenticated;
 grant update (value) on public.site_settings to authenticated;
 
+-- Two policies: anon has no EXECUTE on is_active_approved_admin(), so it must
+-- never appear in a policy evaluated for anon (found by the end-to-end tests).
 drop policy if exists site_settings_public_read on public.site_settings;
 create policy site_settings_public_read on public.site_settings
-  as permissive for select to anon, authenticated
+  as permissive for select to anon
+  using (is_public);
+
+drop policy if exists site_settings_authenticated_read on public.site_settings;
+create policy site_settings_authenticated_read on public.site_settings
+  as permissive for select to authenticated
   using (is_public or (select public.is_active_approved_admin()));
 
 drop policy if exists site_settings_admin_update on public.site_settings;
