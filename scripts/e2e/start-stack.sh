@@ -3,7 +3,7 @@
 #   throwaway Postgres DB (schema snapshot + new migrations + seed)
 #   PostgREST  :3001   (binary path in $POSTGREST_BIN)
 #   mock Supabase gateway :54321 (Auth + Storage enforcing the real RLS)
-#   Next.js :3100 with .env.e2e.local values (never production keys)
+#   Next.js :3100 with local-only keys passed as env (never production keys)
 # Requires PGHOST/PGPORT for a local Postgres superuser `postgres`.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -41,13 +41,12 @@ EOF
 "$POSTGREST_BIN" "$WORK/pgrst.conf" > "$WORK/pgrst.log" 2>&1 &
 JWT_SECRET="$JWT_SECRET" node scripts/e2e/mock-supabase.mjs > "$WORK/mock.log" 2>&1 &
 
-cat > .env.local <<EOF
-NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$ANON
-SUPABASE_SERVICE_ROLE_KEY=$(mkjwt service_role)
-RATE_LIMIT_SALT=local-e2e-salt-not-for-production
-EOF
-
+# Passed as process env (takes precedence over any .env.local), so a
+# developer's real .env.local is never read or overwritten.
+NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321 \
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="$ANON" \
+SUPABASE_SERVICE_ROLE_KEY="$(mkjwt service_role)" \
+RATE_LIMIT_SALT=local-e2e-salt-not-for-production \
 NEXT_TELEMETRY_DISABLED=1 npx next ${NEXT_MODE:-dev} -p 3100 > "$WORK/next.log" 2>&1 &
 until curl -sf -o /dev/null http://localhost:3100/application-form; do sleep 1; done
 echo "E2E stack ready. Work dir: $WORK"
