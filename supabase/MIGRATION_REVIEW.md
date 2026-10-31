@@ -10,11 +10,34 @@ Branch: `feat/secure-applications`. **Nothing here is applied to production.**
 | 4 | `migrations/20261031200400_site_settings_menu.sql` | No | After approval |
 | 1b | `migrations/20261031200500_applications_revoke_public_insert.sql` | **Yes** (old form) | After the new form is deployed |
 | — | `pending/20261101000000_drop_hotel.sql` | **Destructive** | After the frontend stops reading `hotel` |
+| — | `pending/20261101000100_schedule_photo_cleanup.sql` | Enables a job | After the Edge Function is deployed and dry runs are reviewed |
 
 Timestamps follow the apply order, so 1b sorts last. Do **not** run
 `supabase db push` before the new form is deployed: it would apply 1b too.
 
-## Compatibility with production (checked 2026-10-31 21:2x Cairo)
+## Changes since the first review (same day)
+
+Migrations 3 and 4 were revised while the application code was built; the
+files attached to the first review are superseded by the ones on the branch.
+
+- **3 (photos)**: `confirm_application_photos` now returns `result`
+  (`confirmed | superseded | already_confirmed | not_uploaded | not_found`),
+  takes a per-person advisory lock (`app_lock_person_photo`), never lets a
+  guest upload displace an admin-placed photo or a newer reservation, and no
+  longer leaks stale row values for unknown paths. `admin_confirm_photo_replacement`
+  and cleanup expiry take the same lock; double confirmation is rejected.
+  Retention is centralised in `photo_delete_reason()` and includes the
+  approved rule "replaced photos: object deleted 30 days after replacement".
+  New `finish_photo_cleanup_run()`.
+- **4 (site_settings)**: the API can read only `key, value, is_public, updated_at`
+  (audit columns hidden from everyone); the read policy is split so `anon`
+  never evaluates `is_active_approved_admin()` (the combined policy made every
+  anon read fail — caught by the end-to-end tests).
+- **pending/drop_hotel**: aborts unless `site_settings.menu` exists and the
+  hotel content still matches the static copy (md5 `8820f978…`).
+- **pending/schedule_photo_cleanup**: new (see "Cleanup job").
+
+## Compatibility with production (re-checked 2026-10-31 ~22:30 Cairo, read-only)
 
 - Production migration list is unchanged since the snapshot (last: `20261021025244`).
 - `md5` of every `public` function definition and of every `public`/`storage`
@@ -25,8 +48,10 @@ Timestamps follow the apply order, so 1b sorts last. Do **not** run
   `status_updated_at` column exist in production.
 - `public.applications` has 0 rows, so no existing data is rewritten; the
   updated CHECK function only gets *more* permissive (allows an `id` key).
-- Local tests: `supabase/tests/run.sh` — 2 files, all assertions pass on
-  PostgreSQL 16 (production is 17.6; nothing used is version-specific).
+- `hotel` content md5 is still `8820f978…` (= lib/config/hotel.ts).
+- Local tests: `supabase/tests/run.sh` — 3 SQL test files pass on
+  PostgreSQL 16 (production is 17.6; nothing used is version-specific), and the
+  browser end-to-end suite (scripts/e2e) passes against the same migrations.
 
 ---
 
@@ -116,16 +141,18 @@ Existing `menu_*` policies are untouched.
 | `photo_cleanup_still_eligible(photo_id)` | service_role | Re-check right before each delete. |
 | `finish_photo_cleanup_item(photo_id, action, existed)` | service_role | Record the outcome; rows are never deleted. |
 
-**Retention (approved)**
+**Retention (approved)** — single source: `photo_delete_reason()`
 
 | Photo | Rule |
 |---|---|
 | Current photo, pending application | Never deleted |
-| Current photo, approved application | Never deleted |
+| Current photo, approved application | Never deleted (no membership expiry data exists yet) |
 | Any photo, rejected/cancelled application | Object deleted 30 days after the status change |
 | Replaced photo (any application) | Object deleted 30 days after replacement |
 | Reservation never uploaded | Marked `expired` after 24 h (no storage call) |
 | Upload never confirmed | Becomes current only if the person has none; otherwise marked `replaced` (then the 30-day rule) |
+
+Rows are never deleted; a deleted photo keeps its metadata (`deleted_at`, `delete_reason`, `replaced_by`).
 
 **New table `photo_cleanup_runs`** — admin read-only log; unique scheduled run per Cairo date. *No job is scheduled by this migration.*
 
@@ -144,3 +171,41 @@ Existing `menu_*` policies are untouched.
 ## Pending — drop hotel (not in migrations/)
 
 Drops view `hotel_admin`, table `hotel` (1 row, content preserved in static config + `site_settings`), function `hotel_set_audit_fields()`. Aborts if `site_settings.menu` is missing. Does not touch storage.
+
+## Cleanup job (pending — not scheduled)
+
+- Code: `supabase/functions/_shared/photo-cleanup.ts` (logic, unit tested) and
+  `supabase/functions/cleanup-application-photos/index.ts` (Deno entry).
+- Auth: header `x-cleanup-secret` = `CLEANUP_SECRET` (≥ 32 chars, timing-safe compare);
+  deploy with `--no-verify-jwt`.
+- Deletes for real only when the function secret `CLEANUP_LIVE=true` **and**
+  the request does not ask for a dry run. Default: dry run (counts only).
+- Schedule (`pending/…_schedule_photo_cleanup.sql`): pg_cron at 20:30 and
+  21:30 UTC; `invoke_photo_cleanup_if_due()` acts only when Cairo time is
+  23:25–23:35, so exactly one run fires at 23:30 Cairo in summer (UTC+3) and
+  winter (UTC+2). One scheduled run per Cairo date (unique index). URL and
+  secret are read from Vault (`photo_cleanup_url`, `photo_cleanup_secret`).
+- Monitoring: `public.photo_cleanup_runs` (admins can read) — status
+  `succeeded | partial | failed`, counts, error, details; Edge Function logs
+  are structured JSON. A missing row for a day or a non-`succeeded` status
+  needs attention.
+
+## Release sequence (nothing below has been executed)
+
+1. Review and approve these files.
+2. Apply **1a, 2, 3, 4** (non-breaking; the current site keeps working: it
+   still inserts directly and still reads `hotel`).
+3. Vercel → Project → Settings → Environment Variables (Production + Preview):
+   `SUPABASE_SERVICE_ROLE_KEY` (Supabase → Project Settings → API keys, the
+   secret/service-role key; never prefixed with `NEXT_PUBLIC_`) and
+   `RATE_LIMIT_SALT` (random, ≥ 32 chars).
+4. Deploy the branch to a Preview, smoke-test, then promote to Production.
+5. Apply **1b** (closes direct public inserts).
+6. Apply **pending/drop_hotel** (moved into `migrations/` with a new timestamp).
+7. Cleanup: deploy the Edge Function, set `CLEANUP_SECRET`, create the two
+   Vault secrets, apply **pending/schedule_photo_cleanup**, review a few daily
+   dry-run rows in `photo_cleanup_runs`, then set `CLEANUP_LIVE=true`.
+
+Rollback notes: steps 2–4 can be rolled back by redeploying the previous
+frontend (the old code paths still work until step 5). After step 5 a
+rollback of the frontend requires re-granting anon INSERT (see 1b).
