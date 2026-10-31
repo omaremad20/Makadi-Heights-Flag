@@ -140,6 +140,7 @@ export function ApplicationForm() {
     reset,
     setValue,
     getValues,
+    setError,
     formState: { errors, isSubmitting, isDirty },
   } = methods;
 
@@ -162,6 +163,9 @@ export function ApplicationForm() {
   const [headcount, setHeadcount] = useState<number>(1);
 
   const inFlight = useRef(false); // blocks repeat submits
+  // One key per submission attempt: retries after a lost response replay the
+  // same application instead of creating a duplicate.
+  const idempotencyKey = useRef<string | null>(null);
 
   // Unsaved changes warning
   const { showConfirmDialog, confirmNavigation, cancelNavigation } =
@@ -277,9 +281,12 @@ export function ApplicationForm() {
           : [],
     };
 
+    idempotencyKey.current ??= crypto.randomUUID();
+
     try {
-      const result = await submitApplication(cleanedValues);
+      const result = await submitApplication(cleanedValues, idempotencyKey.current);
       if (result.ok) {
+        idempotencyKey.current = null;
         setSubmitted(true);
         setLastSubmittedValues(cleanedValues);
         toast.success("Application submitted successfully");
@@ -303,6 +310,10 @@ export function ApplicationForm() {
           setPdfGenerating(false);
         }
       } else {
+        if (result.rotateKey) idempotencyKey.current = null;
+        for (const [path, message] of Object.entries(result.fieldErrors ?? {})) {
+          setError(path as Parameters<typeof setError>[0], { type: "server", message });
+        }
         setSubmitError(result.message); // values stay in the form
         toast.error(result.message || "Application not submitted");
       }

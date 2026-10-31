@@ -1,49 +1,57 @@
-import { toApplicationPayload, type ApplicationFormValues } from "@/lib/applications/form-schema";
-import { validateApplication } from "@/lib/applications/vaildation";
-import { getGuestClient } from "@/lib/supabase/guest-client";
+import type { SubmitApplicationResponse, SubmittedApplication } from "@/lib/applications/api-types";
+import type { ApplicationFormValues } from "@/lib/applications/form-schema";
 
-export type SubmitResult = { ok: true } | { ok: false; message: string };
-
-/**
- * Direct browser INSERT as `anon`.
- * - No .select()/returning: anon has no SELECT, so the row (and its id) can't be read back.
- * - Only the 13 permitted columns are sent; the database sets status = 'pending'.
- * - Errors are mapped to generic messages. Codes are logged, never values (personal data).
- */
-export async function submitApplication(values: ApplicationFormValues): Promise<SubmitResult> {
-  const checked = validateApplication(toApplicationPayload(values));
-  if (!checked.ok) {
-    return { ok: false, message: "Some details need attention. Check the highlighted fields and try again." };
-  }
-
-  try {
-    const partnerCount = checked.value.partner_name ? 1 : 0;
-    const additionalCount = checked.value.additional_persons ? checked.value.additional_persons.length : 0;
-    const personsCount = 1 + partnerCount + additionalCount;
-
-    const payload = {
-      ...checked.value,
-      persons_count: personsCount,
+export type SubmitResult =
+  | { ok: true; application: SubmittedApplication }
+  | {
+      ok: false;
+      message: string;
+      fieldErrors?: Record<string, string>;
+      /** True when nothing was stored, so the caller should use a new idempotency key next time. */
+      rotateKey: boolean;
     };
 
-    const { error } = await getGuestClient()
-      .from("applications")
-      .insert(payload);
-    if (!error) return { ok: true };
+const NETWORK_MESSAGE =
+  "Your application wasn’t submitted. Check your connection and try again. Your details are still here.";
 
-    console.error("Application insert failed", error.code, error.message);
-    switch (error.code) {
-      case "42501":
-        return { ok: false, message: "Applications can’t be accepted right now. Try again later or contact the community office." };
-      case "23514":
-      case "23502":
-      case "22P02":
-        return { ok: false, message: "Some details were not accepted. Check them and try again." };
-      default:
-        return { ok: false, message: "Your application wasn’t submitted. Check your connection and try again. Your details are still here." };
-    }
-  } catch (error) {
-    console.log(error)
-    return { ok: false, message: "Your application wasn’t submitted. Check your connection and try again. Your details are still here." };
+/**
+ * Sends the application to POST /api/applications (server-side validation,
+ * rate limit and idempotent insert). The browser never talks to the database
+ * for this, and no keys beyond the public URL are involved.
+ *
+ * `idempotencyKey` must stay the same for retries of the same submission so a
+ * lost response can never create a duplicate application.
+ */
+export async function submitApplication(
+  values: ApplicationFormValues,
+  idempotencyKey: string,
+): Promise<SubmitResult> {
+  let res: Response;
+  try {
+    res = await fetch("/api/applications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idempotencyKey, application: values }),
+      cache: "no-store",
+    });
+  } catch {
+    return { ok: false, message: NETWORK_MESSAGE, rotateKey: false };
   }
+
+  let body: SubmitApplicationResponse | null = null;
+  try {
+    body = (await res.json()) as SubmitApplicationResponse;
+  } catch {
+    body = null;
+  }
+
+  if (body?.ok) return { ok: true, application: body.application };
+
+  return {
+    ok: false,
+    message: body && !body.ok ? body.message : NETWORK_MESSAGE,
+    fieldErrors: body && !body.ok ? body.fieldErrors : undefined,
+    // 400/403/422/429: definitely nothing stored. 5xx/unknown: maybe stored -> keep the key.
+    rotateKey: res.status >= 400 && res.status < 500 && res.status !== 409,
+  };
 }
