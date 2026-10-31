@@ -1,7 +1,10 @@
 "use client";
 
-import { useScrollLock } from "@/hooks/use-scroll-lock";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, type MouseEvent } from "react";
+
+import { useScrollLock } from "@/hooks/use-scroll-lock";
 
 const NAV_LINKS = [
   { label: "Flag", id: "flag" },
@@ -10,6 +13,8 @@ const NAV_LINKS = [
   { label: "Dining", id: "dining" }, 
   { label: "Serenity Location", id: "serenity-location" },
 ] as const;
+
+const FORM_LINK = { label: "Fill Clubhouse Form", href: "/application-form" } as const;
 
 function scrollToSection(id: string) {
   const target = document.getElementById(id);
@@ -30,6 +35,9 @@ function scrollToSection(id: string) {
 }
 
 export function NavMenu() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const onHome = pathname === "/";
   const [open, setOpen] = useState(false);
   const panelId = useId();
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -76,12 +84,20 @@ export function NavMenu() {
     };
   }, [open]);
 
+  // On the homepage: smooth-scroll after the menu closes (no navigation).
+  // Elsewhere: navigate to "/#section"; HomeHashScroll positions it on arrival.
+  // (The unsaved-changes guard on the form page intercepts this click first.)
   const onLinkClick = (event: MouseEvent<HTMLAnchorElement>, id: string) => {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
       return;
     event.preventDefault();
-    pendingSectionRef.current = id;
     setOpen(false);
+    if (onHome) {
+      pendingSectionRef.current = id;
+      window.history.replaceState(window.history.state, "", `#${id}`);
+    } else {
+      router.push(`/#${id}`);
+    }
   };
 
   const bar =
@@ -137,7 +153,7 @@ export function NavMenu() {
               }`}
             >
               <a
-                href={`#${link.id}`}
+                href={`/#${link.id}`}
                 onClick={(event) => onLinkClick(event, link.id)}
                 className="flex min-h-14 items-center py-4 font-brand-heading text-xl text-brand-button outline-none transition-colors hover:text-brand-secondary focus-visible:text-brand-secondary focus-visible:underline focus-visible:decoration-2 focus-visible:underline-offset-4 sm:text-2xl"
               >
@@ -145,6 +161,21 @@ export function NavMenu() {
               </a>
             </li>
           ))}
+          <li
+            style={{ transitionDelay: open ? `${120 + NAV_LINKS.length * 60}ms` : "0ms" }}
+            className={`pt-3 transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none ${
+              open ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0"
+            }`}
+          >
+            <Link
+              href={FORM_LINK.href}
+              onClick={() => setOpen(false)}
+              aria-current={pathname === FORM_LINK.href ? "page" : undefined}
+              className="flex min-h-12 w-full items-center justify-center rounded-full bg-brand-button px-6 py-3 font-brand-heading text-lg text-brand-button-foreground outline-none transition-opacity hover:opacity-90 focus-visible:ring-[3px] focus-visible:ring-brand-secondary/50"
+            >
+              {FORM_LINK.label}
+            </Link>
+          </li>
         </ul>
       </nav>
     </>

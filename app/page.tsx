@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { AquaParkSection } from "@/components/home/aqua-park-section";
+import { HomeHashScroll } from "@/components/home/home-hash-scroll";
 import { BeachAccessSection } from "@/components/home/beach-access-section";
 import { LocationCard } from "@/components/home/location-card";
 import { MealSchedule } from "@/components/home/meal-schedule";
@@ -30,6 +31,7 @@ export default async function Page() {
 
   return (
     <main className="mx-auto flex min-h-full w-[95%] sm:w-[90%] flex-col gap-10 py-10">
+      <HomeHashScroll />
       <div className="space-y-2">
         <p className="text-lg font-semibold text-[#2D6867]">
           Dear Valued Client,
