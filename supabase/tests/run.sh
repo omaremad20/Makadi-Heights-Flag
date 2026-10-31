@@ -13,7 +13,7 @@ cd "$(dirname "$0")/../.."
 TEST_DB="${TEST_DB:-flag_test}"
 PSQL=(psql -U "${PGUSER:-postgres}" -v ON_ERROR_STOP=1 -q -X)
 
-"${PSQL[@]}" -d postgres -c "drop database if exists ${TEST_DB}" -c "create database ${TEST_DB}" >/dev/null
+"${PSQL[@]}" -d postgres -c "drop database if exists ${TEST_DB} with (force)" -c "create database ${TEST_DB}" >/dev/null
 "${PSQL[@]}" -d "$TEST_DB" -f supabase/tests/00_supabase_stub.sql >/dev/null 2>&1
 
 BASELINE_VERSION=20261021025244
@@ -30,6 +30,7 @@ for f in supabase/migrations/*.sql; do
   applied=$((applied + 1))
 done
 echo "baseline: ok, new migrations applied: $applied"
+[[ "${SKIP_TESTS:-0}" == "1" ]] && exit 0
 
 status=0
 for t in supabase/tests/[0-9][0-9]_*.test.sql; do

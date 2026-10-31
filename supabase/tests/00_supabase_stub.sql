@@ -34,14 +34,22 @@ create table if not exists auth.users (
   created_at timestamptz default now()
 );
 
+-- Same shape as Supabase's own helpers: per-claim GUCs (older PostgREST)
+-- or the request.jwt.claims JSON (PostgREST >= 9).
 create or replace function auth.uid() returns uuid language sql stable as $$
-  select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
+  select coalesce(
+    nullif(current_setting('request.jwt.claim.sub', true), ''),
+    nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')::uuid
 $$;
 create or replace function auth.email() returns text language sql stable as $$
-  select nullif(current_setting('request.jwt.claim.email', true), '')
+  select coalesce(
+    nullif(current_setting('request.jwt.claim.email', true), ''),
+    nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'email')
 $$;
 create or replace function auth.role() returns text language sql stable as $$
-  select nullif(current_setting('request.jwt.claim.role', true), '')
+  select coalesce(
+    nullif(current_setting('request.jwt.claim.role', true), ''),
+    nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role')
 $$;
 create or replace function auth.jwt() returns jsonb language sql stable as $$
   select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb
