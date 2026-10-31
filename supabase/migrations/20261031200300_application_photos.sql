@@ -13,7 +13,7 @@
 -- Lifecycle of a row in public.application_photos:
 --   reserved  -> slot issued, waiting for the upload (expires after 24 h)
 --   active    -> the photo currently shown for that person
---   replaced  -> superseded by a newer photo (kept; never auto-deleted for now)
+--   replaced  -> superseded by a newer photo; object deleted 30 days later
 --   expired   -> reservation never used; no object exists
 --   deleted   -> object removed by the cleanup job (row kept as a record)
 -- =============================================================================
@@ -371,14 +371,40 @@ $$;
 revoke all on function public.start_photo_cleanup_run(boolean, text) from public, anon, authenticated;
 grant execute on function public.start_photo_cleanup_run(boolean, text) to service_role;
 
--- What the job may touch. Retention policy (approved 2026-10-31):
---   * pending applications .......... never deleted
---   * approved applications ......... never deleted (pending a retention rule)
---   * rejected / cancelled .......... deleted 30 days after the status change
---   * reservations never uploaded ... marked expired after 24 h (no storage call)
---   * replaced photos ............... kept for now (follows the rule above via
---                                     their application's status)
--- Only objects in 'application-photos' are ever returned.
+-- Retention policy (approved by Omar 2026-10-31). The single source of truth
+-- is photo_delete_reason(): it returns why a photo's object may be deleted
+-- now, or NULL when it must be kept.
+--   * current photo, pending application ......... kept
+--   * current photo, approved application ........ kept (no expiry data yet)
+--   * any photo, rejected / cancelled application  deleted 30 days after the status change
+--   * replaced (superseded) photo ................. deleted 30 days after replacement
+--   * reservation never uploaded .................. marked expired after 24 h (no storage call)
+-- Rows are never deleted: a deleted photo keeps its metadata and history.
+-- Only objects in the 'application-photos' bucket are ever referenced.
+create or replace function public.photo_delete_reason(p_photo_id uuid)
+returns text
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select case
+    when a.status in ('rejected', 'cancelled')
+         and a.status_updated_at < now() - interval '30 days'
+      then 'application_' || a.status || '_30d'
+    when p.status = 'replaced'
+         and p.replaced_at < now() - interval '30 days'
+      then 'replaced_30d'
+  end
+  from public.application_photos p
+  join public.applications a on a.id = p.application_id
+  where p.id = p_photo_id
+    and p.status in ('active', 'replaced')
+    and p.storage_path like a.id::text || '/%'
+$$;
+revoke all on function public.photo_delete_reason(uuid) from public, anon, authenticated;
+grant execute on function public.photo_delete_reason(uuid) to service_role;
+
 create or replace function public.photo_cleanup_candidates(p_limit int default 500)
 returns table (photo_id uuid, storage_path text, action text, reason text)
 language sql
@@ -386,29 +412,26 @@ stable
 security definer
 set search_path = ''
 as $$
-  (
+  select * from (
     select p.id, p.storage_path, 'expire'::text, 'reservation_unused_24h'::text
     from public.application_photos p
     where p.status = 'reserved'
       and p.created_at < now() - interval '24 hours'
-  )
-  union all
-  (
-    select p.id, p.storage_path, 'delete'::text, 'application_' || a.status || '_30d'
+    union all
+    select p.id, p.storage_path, 'delete'::text, r.reason
     from public.application_photos p
-    join public.applications a on a.id = p.application_id
+    cross join lateral (select public.photo_delete_reason(p.id) as reason) r
     where p.status in ('active', 'replaced')
-      and a.status in ('rejected', 'cancelled')
-      and a.status_updated_at is not null
-      and a.status_updated_at < now() - interval '30 days'
-  )
+      and r.reason is not null
+  ) c
   limit greatest(1, least(p_limit, 1000))
 $$;
 revoke all on function public.photo_cleanup_candidates(int) from public, anon, authenticated;
 grant execute on function public.photo_cleanup_candidates(int) to service_role;
 
 -- Called by the job immediately BEFORE it deletes an object, so a status
--- change after the candidate list was built is respected.
+-- change after the candidate list was built (e.g. a rejected application
+-- re-opened) is respected.
 create or replace function public.photo_cleanup_still_eligible(p_photo_id uuid)
 returns boolean
 language sql
@@ -416,23 +439,12 @@ stable
 security definer
 set search_path = ''
 as $$
-  select exists (
-    select 1
-    from public.application_photos p
-    join public.applications a on a.id = p.application_id
-    where p.id = p_photo_id
-      and p.status in ('active', 'replaced')
-      and p.storage_path like a.id::text || '/%'
-      and a.status in ('rejected', 'cancelled')
-      and a.status_updated_at < now() - interval '30 days'
-  )
+  select public.photo_delete_reason(p_photo_id) is not null
 $$;
 revoke all on function public.photo_cleanup_still_eligible(uuid) from public, anon, authenticated;
 grant execute on function public.photo_cleanup_still_eligible(uuid) to service_role;
 
--- Applies the result for one photo after the job talked to the Storage API.
--- Re-checks the policy so a status change between listing and deleting
--- (e.g. a rejected application re-opened) can never cause a wrong deletion.
+-- Records the outcome for one photo after the job talked to the Storage API.
 create or replace function public.finish_photo_cleanup_item(
   p_photo_id uuid,
   p_action   text,
@@ -443,28 +455,39 @@ security definer
 set search_path = ''
 as $$
 declare
-  v_photo public.application_photos;
-  v_app_status text;
+  v_photo  public.application_photos;
+  v_reason text;
 begin
   select * into v_photo from public.application_photos where id = p_photo_id for update;
   if not found then return 'missing'; end if;
-  select status into v_app_status from public.applications where id = v_photo.application_id;
 
   if p_action = 'expire' then
     if v_photo.status <> 'reserved' then return 'skipped'; end if;
-    if p_object_existed then
-      -- the guest uploaded but never confirmed: keep it as their photo
-      update public.application_photos p set status = 'replaced', replaced_at = now()
-       where p.application_id = v_photo.application_id and p.person_key = v_photo.person_key and p.status = 'active';
-      update public.application_photos set status = 'active', uploaded_at = now() where id = p_photo_id;
-      return 'activated';
+    if not p_object_existed then
+      update public.application_photos set status = 'expired' where id = p_photo_id;
+      return 'expired';
     end if;
-    update public.application_photos set status = 'expired' where id = p_photo_id;
-    return 'expired';
+    -- Uploaded but never confirmed. Become the current photo only if the
+    -- person has none; never displace a newer current photo (e.g. an admin's).
+    if exists (select 1 from public.application_photos p
+               where p.application_id = v_photo.application_id
+                 and p.person_key = v_photo.person_key and p.status = 'active') then
+      update public.application_photos
+         set status = 'replaced', uploaded_at = now(), replaced_at = now()
+       where id = p_photo_id;
+      return 'superseded';
+    end if;
+    update public.application_photos set status = 'active', uploaded_at = now() where id = p_photo_id;
+    return 'activated';
+
   elsif p_action = 'delete' then
-    if v_app_status not in ('rejected', 'cancelled') then return 'skipped'; end if;
+    -- The job calls this only AFTER photo_cleanup_still_eligible() returned
+    -- true and the Storage API removed the object, so the row must reflect
+    -- that the object is gone even if the status changed in the meantime.
+    if v_photo.status not in ('active', 'replaced') then return 'skipped'; end if;
+    v_reason := coalesce(public.photo_delete_reason(p_photo_id), 'eligible_at_delete_time');
     update public.application_photos
-       set status = 'deleted', deleted_at = now(), delete_reason = 'retention_' || v_app_status || '_30d'
+       set status = 'deleted', deleted_at = now(), delete_reason = v_reason
      where id = p_photo_id;
     return 'deleted';
   end if;

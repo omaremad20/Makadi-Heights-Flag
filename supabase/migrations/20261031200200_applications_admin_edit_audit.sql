@@ -6,7 +6,7 @@
 -- audit columns are now stamped by the database instead of trusted from the
 -- client, which they never were in practice).
 --
--- ⚠ The re-review rule (section 3) is a PROPOSAL awaiting Omar's approval.
+-- The re-review rule (section 3) was approved by Omar on 2026-10-31.
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
@@ -75,7 +75,7 @@ create trigger application_revisions_no_truncate
   for each statement execute function public.application_revisions_immutable();
 
 -- ---------------------------------------------------------------------------
--- 3. Re-review rule (PROPOSAL — see the review notes)
+-- 3. Re-review rule (approved 2026-10-31)
 --    An APPROVED application goes back to 'pending' when an edit changes
 --    something that affects eligibility or price:
 --      period, membership_type, user_type, unit_number,

@@ -195,6 +195,34 @@ begin
   if (select count(*) from public.application_revisions where application_id = v_id) <> 5 then
     raise exception 'expected 5 revisions, got %', (select count(*) from public.application_revisions where application_id = v_id);
   end if;
+
+  -- approved rule matrix (Omar, 2026-10-31)
+  update public.applications set status = 'approved' where id = v_id;
+  update public.applications set partner_name = 'Sarah Tester', nationality = 'Egyptian', email = 'new@example.com' where id = v_id;
+  if (select status from public.applications where id = v_id) <> 'approved' then raise exception 'partner rename reset approval'; end if;
+
+  update public.applications set partner_name = null where id = v_id;          -- remove partner
+  if (select status from public.applications where id = v_id) <> 'pending' then raise exception 'removing partner kept approval'; end if;
+  update public.applications set status = 'approved' where id = v_id;
+  update public.applications set partner_name = 'Back Partner' where id = v_id;  -- add partner
+  if (select status from public.applications where id = v_id) <> 'pending' then raise exception 'adding partner kept approval'; end if;
+
+  update public.applications set status = 'approved' where id = v_id;
+  update public.applications set unit_number = 'A-102' where id = v_id;
+  if (select status from public.applications where id = v_id) <> 'pending' then raise exception 'unit change kept approval'; end if;
+  update public.applications set status = 'approved' where id = v_id;
+  update public.applications set user_type = 'tenant-vistior' where id = v_id;
+  if (select status from public.applications where id = v_id) <> 'pending' then raise exception 'user_type change kept approval'; end if;
+  update public.applications set status = 'approved' where id = v_id;
+  update public.applications set membership_type = 'clubhouse_only' where id = v_id;
+  if (select status from public.applications where id = v_id) <> 'pending' then raise exception 'membership change kept approval'; end if;
+
+  -- the rename revision records old and new values
+  if not exists (select 1 from public.application_revisions
+                 where application_id = v_id and 'full_name' = any (changed_fields)
+                   and old_values ->> 'full_name' = 'Omar Test' and new_values ->> 'full_name' = 'Omar Tested') then
+    raise exception 'name change old/new values not recorded';
+  end if;
   if not exists (select 1 from public.application_revisions
                  where application_id = v_id and status_reset_for_review and 'additional_persons' = any (changed_fields)) then
     raise exception 'status reset not flagged in revisions';

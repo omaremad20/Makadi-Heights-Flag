@@ -207,7 +207,7 @@ do $$ begin
 end $$;
 reset role;
 
--- approved applications are never candidates
+-- approved application: the CURRENT photo is never a candidate, however old
 update public.applications set status = 'approved' where id = current_setting('test.app_id')::uuid;
 do $$ begin
   alter table public.applications disable trigger applications_before_update_trg;
@@ -217,7 +217,58 @@ end $$;
 set role service_role;
 do $$ begin
   if exists (select 1 from public.photo_cleanup_candidates() where action = 'delete') then
-    raise exception 'approved application photos offered for deletion';
+    raise exception 'photo of an approved application offered for deletion before 30 days after replacement';
+  end if;
+end $$;
+reset role;
+
+-- replaced photo: deleted 30 days after replacement, even on an approved application
+update public.application_photos set replaced_at = now() - interval '31 days'
+ where application_id = current_setting('test.app_id')::uuid and status = 'replaced';
+set role service_role;
+do $$ declare r record; n int := 0; begin
+  for r in select c.*, p.status from public.photo_cleanup_candidates() c
+           join public.application_photos p on p.id = c.photo_id where c.action = 'delete' loop
+    n := n + 1;
+    if r.status <> 'replaced' or r.reason <> 'replaced_30d' then
+      raise exception 'wrong candidate: status % reason %', r.status, r.reason;
+    end if;
+    if not public.photo_cleanup_still_eligible(r.photo_id) then raise exception 'eligibility disagrees'; end if;
+    if public.finish_photo_cleanup_item(r.photo_id, 'delete', true) <> 'deleted' then raise exception 'finish failed'; end if;
+  end loop;
+  if n <> 1 then raise exception 'expected exactly 1 replaced candidate, got %', n; end if;
+
+  -- metadata kept after deletion
+  if not exists (select 1 from public.application_photos
+                 where application_id = current_setting('test.app_id')::uuid
+                   and status = 'deleted' and delete_reason = 'replaced_30d' and replaced_by is not null) then
+    raise exception 'deleted photo lost its metadata';
+  end if;
+  -- the current photo is untouched
+  if (select count(*) from public.application_photos
+      where application_id = current_setting('test.app_id')::uuid and person_key = 'applicant' and status = 'active') <> 1 then
+    raise exception 'current photo affected';
+  end if;
+  -- nothing left to delete
+  if exists (select 1 from public.photo_cleanup_candidates() where action = 'delete') then
+    raise exception 'candidates remain after cleanup';
+  end if;
+end $$;
+reset role;
+
+-- a late, never-confirmed upload must not displace the current photo
+set role service_role;
+do $$ declare v_path text; v_res text; begin
+  insert into public.application_photos (application_id, person_key, storage_path, created_at)
+  values (current_setting('test.app_id')::uuid, 'applicant',
+          current_setting('test.app_id') || '/applicant/' || gen_random_uuid() || '.webp', now() - interval '2 days')
+  returning storage_path into v_path;
+  insert into storage.objects (bucket_id, name) values ('application-photos', v_path);
+  v_res := public.finish_photo_cleanup_item((select id from public.application_photos where storage_path = v_path), 'expire', true);
+  if v_res <> 'superseded' then raise exception 'late upload result %', v_res; end if;
+  if (select count(*) from public.application_photos
+      where application_id = current_setting('test.app_id')::uuid and person_key = 'applicant' and status = 'active') <> 1 then
+    raise exception 'late upload displaced the current photo';
   end if;
 end $$;
 reset role;
