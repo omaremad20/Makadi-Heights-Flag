@@ -62,13 +62,13 @@ begin
 
   -- confirm without an object -> not confirmed
   select storage_path into v_path from public.application_photos where application_id = v_app and person_key = 'applicant';
-  if (select confirmed from public.confirm_application_photos('22222222-2222-4222-8222-222222222222', array[v_path])) then
+  if (select result from public.confirm_application_photos('22222222-2222-4222-8222-222222222222', array[v_path])) <> 'not_uploaded' then
     raise exception 'confirmed a photo that was never uploaded';
   end if;
 
   -- simulate the signed upload, then confirm
   insert into storage.objects (bucket_id, name) values ('application-photos', v_path);
-  if not (select confirmed from public.confirm_application_photos('22222222-2222-4222-8222-222222222222', array[v_path])) then
+  if (select result from public.confirm_application_photos('22222222-2222-4222-8222-222222222222', array[v_path])) <> 'confirmed' then
     raise exception 'upload not confirmed';
   end if;
   if (select status from public.application_photos where storage_path = v_path) <> 'active' then
@@ -76,7 +76,7 @@ begin
   end if;
 
   -- a different application's key cannot confirm this path
-  if (select confirmed from public.confirm_application_photos('11111111-1111-4111-8111-111111111111', array[v_path])) then
+  if (select result from public.confirm_application_photos('11111111-1111-4111-8111-111111111111', array[v_path])) <> 'not_found' then
     raise exception 'cross-application confirm';
   end if;
 
@@ -146,6 +146,50 @@ end $$;
 reset role;
 reset request.jwt.claim.sub;
 
+-- --------------------------------------------------------------- guest vs admin precedence
+-- An older guest reservation that finishes AFTER an admin replacement must not win.
+set role service_role;
+select storage_path as guest_late_path
+  from public.reserve_application_photos('22222222-2222-4222-8222-222222222222', array['applicant']) \gset
+reset role;
+set test.guest_late_path = :'guest_late_path';
+
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+do $$ declare v_new text; begin
+  v_new := public.admin_reserve_photo_replacement(current_setting('test.app_id')::uuid, 'applicant');
+  insert into storage.objects (bucket_id, name) values ('application-photos', v_new);
+  perform public.admin_confirm_photo_replacement(v_new);
+  perform set_config('test.admin_path', v_new, false);
+  begin
+    perform public.admin_confirm_photo_replacement(v_new);   -- double confirm
+    raise exception 'admin confirm accepted twice';
+  exception when sqlstate 'PT409' then null; end;
+end $$;
+reset role;
+reset request.jwt.claim.sub;
+
+set role service_role;
+do $$ declare r text; begin
+  insert into storage.objects (bucket_id, name) values ('application-photos', current_setting('test.guest_late_path'));
+  select c.result into r from public.confirm_application_photos('22222222-2222-4222-8222-222222222222',
+                                                                array[current_setting('test.guest_late_path')]) c;
+  if r <> 'superseded' then raise exception 'late guest upload result: %', r; end if;
+  if (select status from public.application_photos where storage_path = current_setting('test.admin_path')) <> 'active' then
+    raise exception 'late guest upload displaced the admin photo';
+  end if;
+  -- confirming again is a harmless no-op
+  select c.result into r from public.confirm_application_photos('22222222-2222-4222-8222-222222222222',
+                                                                array[current_setting('test.guest_late_path')]) c;
+  if r <> 'already_confirmed' then raise exception 'second confirm result: %', r; end if;
+  -- exactly one current photo per person
+  if (select count(*) from public.application_photos
+      where application_id = current_setting('test.app_id')::uuid and person_key = 'applicant' and status = 'active') <> 1 then
+    raise exception 'more than one current photo';
+  end if;
+end $$;
+reset role;
+
 -- --------------------------------------------------------------- cleanup selection / retention
 set role service_role;
 do $$
@@ -185,7 +229,10 @@ begin
     if r.storage_path not like v_app::text || '/%' then raise exception 'candidate outside application'; end if;
     if not public.photo_cleanup_still_eligible(r.photo_id) then raise exception 'eligibility re-check disagrees'; end if;
   end loop;
-  if n <> 2 then raise exception 'expected 2 delete candidates (active + replaced), got %', n; end if;
+  if n <> (select count(*) from public.application_photos
+            where application_id = v_app and status in ('active', 'replaced')) or n < 2 then
+    raise exception 'rejected+30d must offer every active/replaced photo, got %', n;
+  end if;
 
   -- duplicate-run protection
   if public.start_photo_cleanup_run(true) is null then raise exception 'first run not created'; end if;
@@ -236,7 +283,10 @@ do $$ declare r record; n int := 0; begin
     if not public.photo_cleanup_still_eligible(r.photo_id) then raise exception 'eligibility disagrees'; end if;
     if public.finish_photo_cleanup_item(r.photo_id, 'delete', true) <> 'deleted' then raise exception 'finish failed'; end if;
   end loop;
-  if n <> 1 then raise exception 'expected exactly 1 replaced candidate, got %', n; end if;
+  if n < 1 or exists (select 1 from public.application_photos
+                      where application_id = current_setting('test.app_id')::uuid and status = 'replaced') then
+    raise exception 'not every replaced photo was cleaned (% done)', n;
+  end if;
 
   -- metadata kept after deletion
   if not exists (select 1 from public.application_photos

@@ -186,51 +186,90 @@ $$;
 revoke all on function public.reserve_application_photos(uuid, text[], text) from public, anon, authenticated;
 grant execute on function public.reserve_application_photos(uuid, text[], text) to service_role;
 
--- Marks uploaded reservations active once the object really exists in storage.
--- A newer photo for the same person supersedes the older one ('replaced').
+-- Serializes every "which photo is current for this person" decision, so
+-- concurrent guest/admin/cleanup actions can never race each other.
+create or replace function public.app_lock_person_photo(p_application_id uuid, p_person_key text)
+returns void
+language sql
+volatile
+set search_path = ''
+as $$
+  select pg_advisory_xact_lock(hashtextextended('application_photo:' || p_application_id::text || ':' || p_person_key, 0))
+$$;
+revoke all on function public.app_lock_person_photo(uuid, text) from public, anon, authenticated;
+
+-- Confirms guest uploads once the object really exists in storage.
+-- Precedence for the current photo of a person:
+--   * an admin-placed photo is never displaced by a guest upload;
+--   * otherwise the most recently RESERVED upload wins, so a slow, older
+--     upload finishing late cannot displace a newer one.
+-- result: confirmed | superseded | already_confirmed | not_uploaded | not_found
 create or replace function public.confirm_application_photos(
   p_idempotency_key uuid,
   p_paths           text[])
-returns table (person_key text, storage_path text, confirmed boolean)
+returns table (person_key text, storage_path text, result text)
 language plpgsql
 security definer
 set search_path = ''
 as $$
 declare
-  v_app  public.applications;
-  v_path text;
-  v_row  public.application_photos;
+  v_app     public.applications;
+  v_path    text;
+  v_row     public.application_photos;
+  v_current public.application_photos;
 begin
   select * into v_app from public.applications a where a.idempotency_key = p_idempotency_key;
   if not found then
     raise exception 'application_not_found' using errcode = 'PT404';
   end if;
-  if p_paths is null or cardinality(p_paths) > 22 then
+  if p_paths is null or cardinality(p_paths) = 0 or cardinality(p_paths) > 22 then
     raise exception 'invalid_paths' using errcode = 'PT422';
   end if;
 
   foreach v_path in array p_paths loop
-    select * into v_row from public.application_photos p
-     where p.storage_path = v_path and p.application_id = v_app.id and p.reserved_by = 'applicant'
-     for update;
+    v_row := null;
+    storage_path := v_path;
 
-    if not found or v_row.status <> 'reserved'
-       or not exists (select 1 from storage.objects o
-                      where o.bucket_id = 'application-photos' and o.name = v_path) then
-      person_key := coalesce(v_row.person_key, null); storage_path := v_path; confirmed := coalesce(v_row.status = 'active', false);
-      return next;
-      continue;
+    select * into v_row from public.application_photos p
+     where p.storage_path = v_path and p.application_id = v_app.id and p.reserved_by = 'applicant';
+    if not found then
+      person_key := null; result := 'not_found';
+      return next; continue;
     end if;
 
-    update public.application_photos p
-       set status = 'replaced', replaced_at = now()
+    perform public.app_lock_person_photo(v_app.id, v_row.person_key);
+    select * into v_row from public.application_photos p where p.id = v_row.id;   -- re-read under the lock
+    person_key := v_row.person_key;
+
+    if v_row.status <> 'reserved' then
+      result := case when v_row.status in ('active', 'replaced') then 'already_confirmed' else 'not_found' end;
+      return next; continue;
+    end if;
+    if not exists (select 1 from storage.objects o
+                   where o.bucket_id = 'application-photos' and o.name = v_path) then
+      result := 'not_uploaded';
+      return next; continue;
+    end if;
+
+    v_current := null;
+    select * into v_current from public.application_photos p
      where p.application_id = v_app.id and p.person_key = v_row.person_key and p.status = 'active';
 
-    update public.application_photos p
-       set status = 'active', uploaded_at = now()
-     where p.id = v_row.id;
-
-    person_key := v_row.person_key; storage_path := v_path; confirmed := true;
+    if v_current.id is not null
+       and (v_current.reserved_by = 'admin' or v_current.created_at > v_row.created_at) then
+      update public.application_photos
+         set status = 'replaced', uploaded_at = now(), replaced_at = now()
+       where id = v_row.id;
+      result := 'superseded';
+    else
+      update public.application_photos
+         set status = 'replaced', replaced_at = now()
+       where id = v_current.id;
+      update public.application_photos
+         set status = 'active', uploaded_at = now()
+       where id = v_row.id;
+      result := 'confirmed';
+    end if;
     return next;
   end loop;
 end;
@@ -289,10 +328,14 @@ begin
   end if;
 
   select * into v_row from public.application_photos p
-   where p.storage_path = p_storage_path and p.reserved_by = 'admin' and p.status = 'reserved'
-   for update;
+   where p.storage_path = p_storage_path and p.reserved_by = 'admin';
   if not found then
     raise exception 'reservation_not_found' using errcode = 'PT404';
+  end if;
+  perform public.app_lock_person_photo(v_row.application_id, v_row.person_key);
+  select * into v_row from public.application_photos p where p.id = v_row.id;  -- re-read under the lock
+  if v_row.status <> 'reserved' then
+    raise exception 'reservation_already_used' using errcode = 'PT409';
   end if;
   if not exists (select 1 from storage.objects o
                  where o.bucket_id = 'application-photos' and o.name = p_storage_path) then
@@ -370,6 +413,43 @@ end;
 $$;
 revoke all on function public.start_photo_cleanup_run(boolean, text) from public, anon, authenticated;
 grant execute on function public.start_photo_cleanup_run(boolean, text) to service_role;
+
+-- Closes a run with its totals. Status is derived: failed items -> 'partial'
+-- (or 'failed' when nothing succeeded), otherwise 'succeeded'.
+create or replace function public.finish_photo_cleanup_run(
+  p_run_id     bigint,
+  p_candidates int,
+  p_deleted    int,
+  p_expired    int,
+  p_failed     int,
+  p_error      text default null,
+  p_details    jsonb default null)
+returns text
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare v_status text;
+begin
+  v_status := case
+    when p_error is not null and coalesce(p_deleted, 0) + coalesce(p_expired, 0) = 0 then 'failed'
+    when p_error is not null or coalesce(p_failed, 0) > 0 then 'partial'
+    else 'succeeded'
+  end;
+  update public.photo_cleanup_runs
+     set status = v_status, finished_at = now(),
+         candidates = coalesce(p_candidates, 0), deleted = coalesce(p_deleted, 0),
+         expired = coalesce(p_expired, 0), failed = coalesce(p_failed, 0),
+         error = left(p_error, 2000), details = p_details
+   where id = p_run_id and status = 'running';
+  if not found then
+    raise exception 'run_not_running' using errcode = 'PT409';
+  end if;
+  return v_status;
+end;
+$$;
+revoke all on function public.finish_photo_cleanup_run(bigint, int, int, int, int, text, jsonb) from public, anon, authenticated;
+grant execute on function public.finish_photo_cleanup_run(bigint, int, int, int, int, text, jsonb) to service_role;
 
 -- Retention policy (approved by Omar 2026-10-31). The single source of truth
 -- is photo_delete_reason(): it returns why a photo's object may be deleted
@@ -458,8 +538,10 @@ declare
   v_photo  public.application_photos;
   v_reason text;
 begin
-  select * into v_photo from public.application_photos where id = p_photo_id for update;
+  select * into v_photo from public.application_photos where id = p_photo_id;
   if not found then return 'missing'; end if;
+  perform public.app_lock_person_photo(v_photo.application_id, v_photo.person_key);
+  select * into v_photo from public.application_photos where id = p_photo_id;  -- re-read under the lock
 
   if p_action = 'expire' then
     if v_photo.status <> 'reserved' then return 'skipped'; end if;
