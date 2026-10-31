@@ -1,0 +1,286 @@
+-- Tests for stage 3 (application photos + cleanup selection) and stage 4 (site_settings).
+-- Runs after 10_applications.test.sql in the same database (its fixtures exist).
+\set ON_ERROR_STOP on
+
+-- bucket is private and image-only
+do $$ begin
+  if (select public from storage.buckets where id = 'application-photos') then raise exception 'photo bucket is public'; end if;
+  if (select allowed_mime_types from storage.buckets where id = 'application-photos') <> array['image/webp','image/jpeg'] then
+    raise exception 'unexpected mime types';
+  end if;
+  if exists (select 1 from pg_policies where schemaname = 'storage' and policyname like 'application_photos%' and cmd = 'UPDATE') then
+    raise exception 'an UPDATE (overwrite) policy exists on the photo bucket';
+  end if;
+  if exists (select 1 from pg_policies where schemaname = 'storage' and policyname like 'application_photos%'
+             and ('anon' = any (roles) or 'public' = any (roles))) then
+    raise exception 'anon/public storage policy exists on the photo bucket';
+  end if;
+end $$;
+
+-- fresh pending application to upload against
+set role service_role;
+select (public.submit_application('22222222-2222-4222-8222-222222222222',
+  '{"membership_type":"clubhouse_only","full_name":"Photo Person","unit_number":"P-100",
+    "additional_persons":[{"name":"Kid Person"}]}', repeat('d', 64)) ->> 'id') as app_id \gset
+reset role;
+set test.app_id = :'app_id';
+
+-- --------------------------------------------------------------- guest reservations
+set role service_role;
+do $$
+declare
+  v_app uuid := current_setting('test.app_id')::uuid;
+  v_kid text;
+  v_path text;
+  r record;
+begin
+  select a.additional_persons -> 0 ->> 'id' into v_kid from public.applications a where a.id = v_app;
+
+  -- partner does not exist on this application
+  begin
+    perform public.reserve_application_photos('22222222-2222-4222-8222-222222222222', array['partner']);
+    raise exception 'reserved a photo for a non-existent partner';
+  exception when sqlstate 'PT422' then null; end;
+
+  -- unknown idempotency key
+  begin
+    perform public.reserve_application_photos(gen_random_uuid(), array['applicant']);
+    raise exception 'reserved for unknown application';
+  exception when sqlstate 'PT404' then null; end;
+
+  -- path traversal / injection in person key
+  begin
+    perform public.reserve_application_photos('22222222-2222-4222-8222-222222222222', array['../x']);
+    raise exception 'accepted malicious person key';
+  exception when sqlstate 'PT422' then null; end;
+
+  for r in select * from public.reserve_application_photos('22222222-2222-4222-8222-222222222222', array['applicant', v_kid]) loop
+    if r.storage_path !~ ('^' || v_app::text || '/' || r.person_key || '/[0-9a-f-]{36}\.webp$') then
+      raise exception 'unexpected path %', r.storage_path;
+    end if;
+  end loop;
+
+  -- confirm without an object -> not confirmed
+  select storage_path into v_path from public.application_photos where application_id = v_app and person_key = 'applicant';
+  if (select confirmed from public.confirm_application_photos('22222222-2222-4222-8222-222222222222', array[v_path])) then
+    raise exception 'confirmed a photo that was never uploaded';
+  end if;
+
+  -- simulate the signed upload, then confirm
+  insert into storage.objects (bucket_id, name) values ('application-photos', v_path);
+  if not (select confirmed from public.confirm_application_photos('22222222-2222-4222-8222-222222222222', array[v_path])) then
+    raise exception 'upload not confirmed';
+  end if;
+  if (select status from public.application_photos where storage_path = v_path) <> 'active' then
+    raise exception 'photo not active';
+  end if;
+
+  -- a different application's key cannot confirm this path
+  if (select confirmed from public.confirm_application_photos('11111111-1111-4111-8111-111111111111', array[v_path])) then
+    raise exception 'cross-application confirm';
+  end if;
+
+  -- abuse guard: max 5 open reservations per person
+  for i in 1..4 loop perform public.reserve_application_photos('22222222-2222-4222-8222-222222222222', array[v_kid]); end loop;
+  begin
+    perform public.reserve_application_photos('22222222-2222-4222-8222-222222222222', array[v_kid]);
+    raise exception 'reservation cap not enforced';
+  exception when sqlstate 'PT429' then null; end;
+end $$;
+reset role;
+
+-- anon / employee cannot call the guest functions or read photo rows
+set role anon;
+do $$ begin
+  perform public.reserve_application_photos('22222222-2222-4222-8222-222222222222', array['applicant']);
+  raise exception 'anon reserved directly';
+exception when insufficient_privilege then null; end $$;
+reset role;
+
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000e';
+do $$ begin
+  if (select count(*) from public.application_photos) <> 0 then raise exception 'employee reads photo rows'; end if;
+  if (select count(*) from storage.objects where bucket_id = 'application-photos') <> 0 then raise exception 'employee reads photo objects'; end if;
+  begin
+    perform public.admin_reserve_photo_replacement(current_setting('test.app_id')::uuid, 'applicant');
+    raise exception 'employee reserved a replacement';
+  exception when insufficient_privilege then null; end;
+  begin
+    insert into storage.objects (bucket_id, name) values ('application-photos', current_setting('test.app_id') || '/applicant/evil.webp');
+    raise exception 'employee uploaded to photo bucket';
+  exception when insufficient_privilege then null; end;
+end $$;
+reset role;
+reset request.jwt.claim.sub;
+
+-- --------------------------------------------------------------- admin replacement
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+do $$
+declare
+  v_app uuid := current_setting('test.app_id')::uuid;
+  v_new text;
+  v_old text;
+begin
+  select storage_path into v_old from public.application_photos where application_id = v_app and person_key = 'applicant' and status = 'active';
+
+  -- admin may not upload to an arbitrary (unreserved) path
+  begin
+    insert into storage.objects (bucket_id, name) values ('application-photos', v_app::text || '/applicant/' || gen_random_uuid() || '.webp');
+    raise exception 'admin uploaded to an unreserved path';
+  exception when insufficient_privilege then null; end;
+
+  v_new := public.admin_reserve_photo_replacement(v_app, 'applicant');
+  insert into storage.objects (bucket_id, name) values ('application-photos', v_new);   -- allowed: reserved path
+  perform public.admin_confirm_photo_replacement(v_new);
+
+  if (select status from public.application_photos where storage_path = v_new) <> 'active' then raise exception 'replacement not active'; end if;
+  if (select status from public.application_photos where storage_path = v_old) <> 'replaced' then raise exception 'old photo not marked replaced'; end if;
+  if not exists (select 1 from public.application_revisions where application_id = v_app and changed_fields = array['photo:applicant']) then
+    raise exception 'photo replacement not in revision history';
+  end if;
+  -- admin can see objects + rows
+  if (select count(*) from storage.objects where bucket_id = 'application-photos') < 2 then raise exception 'admin cannot read photo objects'; end if;
+end $$;
+reset role;
+reset request.jwt.claim.sub;
+
+-- --------------------------------------------------------------- cleanup selection / retention
+set role service_role;
+do $$
+declare v_app uuid := current_setting('test.app_id')::uuid; n int; v_photo uuid;
+begin
+  -- nothing is due: application is pending and reservations are fresh
+  select count(*) into n from public.photo_cleanup_candidates();
+  if n <> 0 then raise exception 'pending application produced % candidates', n; end if;
+
+  -- age the open reservations -> expire candidates only (no deletes)
+  update public.application_photos set created_at = now() - interval '25 hours' where application_id = v_app and status = 'reserved';
+  if exists (select 1 from public.photo_cleanup_candidates() where action = 'delete') then
+    raise exception 'delete candidate for a pending application';
+  end if;
+  if not exists (select 1 from public.photo_cleanup_candidates() where action = 'expire') then
+    raise exception 'stale reservations not offered for expiry';
+  end if;
+end $$;
+reset role;
+
+-- reject, then age the status change 31 days
+update public.applications set status = 'rejected' where id = current_setting('test.app_id')::uuid;
+update public.applications set status_updated_at = now() - interval '31 days' where id = current_setting('test.app_id')::uuid;   -- trigger keeps old value...
+do $$ begin
+  -- ...because status did not change in that UPDATE, so force it below the trigger for the test
+  alter table public.applications disable trigger applications_before_update_trg;
+  update public.applications set status_updated_at = now() - interval '31 days' where id = current_setting('test.app_id')::uuid;
+  alter table public.applications enable trigger applications_before_update_trg;
+end $$;
+
+set role service_role;
+do $$
+declare v_app uuid := current_setting('test.app_id')::uuid; r record; n int := 0;
+begin
+  for r in select * from public.photo_cleanup_candidates() where action = 'delete' loop
+    n := n + 1;
+    if r.storage_path not like v_app::text || '/%' then raise exception 'candidate outside application'; end if;
+    if not public.photo_cleanup_still_eligible(r.photo_id) then raise exception 'eligibility re-check disagrees'; end if;
+  end loop;
+  if n <> 2 then raise exception 'expected 2 delete candidates (active + replaced), got %', n; end if;
+
+  -- duplicate-run protection
+  if public.start_photo_cleanup_run(true) is null then raise exception 'first run not created'; end if;
+  if public.start_photo_cleanup_run(true) is not null then raise exception 'duplicate scheduled run allowed'; end if;
+  if public.start_photo_cleanup_run(true, 'manual') is null then raise exception 'manual run blocked'; end if;
+end $$;
+reset role;
+
+-- re-opening the application makes its photos ineligible again
+update public.applications set status = 'pending' where id = current_setting('test.app_id')::uuid;
+set role service_role;
+do $$ begin
+  if exists (select 1 from public.photo_cleanup_candidates() where action = 'delete') then
+    raise exception 're-opened application still has delete candidates';
+  end if;
+  if exists (select 1 from public.application_photos p where public.photo_cleanup_still_eligible(p.id)) then
+    raise exception 'eligibility re-check ignores re-opened status';
+  end if;
+end $$;
+reset role;
+
+-- approved applications are never candidates
+update public.applications set status = 'approved' where id = current_setting('test.app_id')::uuid;
+do $$ begin
+  alter table public.applications disable trigger applications_before_update_trg;
+  update public.applications set status_updated_at = now() - interval '400 days' where id = current_setting('test.app_id')::uuid;
+  alter table public.applications enable trigger applications_before_update_trg;
+end $$;
+set role service_role;
+do $$ begin
+  if exists (select 1 from public.photo_cleanup_candidates() where action = 'delete') then
+    raise exception 'approved application photos offered for deletion';
+  end if;
+end $$;
+reset role;
+
+-- --------------------------------------------------------------- site_settings
+do $$ begin
+  if (select value from public.site_settings where key = 'menu') <> '{"bucket":"menu","path":"Menu_Serenity_2026.pdf"}'::jsonb then
+    -- baseline has no hotel row (schema only), so seed one for the shape test
+    null;
+  end if;
+end $$;
+insert into public.site_settings (key, value, is_public)
+values ('menu', '{"bucket":"menu","path":"Menu_Serenity_2026.pdf"}', true)
+on conflict (key) do nothing;
+
+do $$ begin
+  begin
+    insert into public.site_settings (key, value) values ('menu2', '{}');  -- fine, different key
+  end;
+  begin
+    update public.site_settings set value = '{"bucket":"other","path":"x.pdf"}' where key = 'menu';
+    raise exception 'menu pointed outside the menu bucket';
+  exception when check_violation then null; end;
+  delete from public.site_settings where key = 'menu2';
+end $$;
+
+set role anon;
+do $$ begin
+  if (select value ->> 'path' from public.site_settings where key = 'menu') <> 'Menu_Serenity_2026.pdf' then
+    raise exception 'anon cannot read public menu setting';
+  end if;
+  update public.site_settings set value = '{"bucket":"menu","path":"evil.pdf"}' where key = 'menu';
+  raise exception 'anon updated settings';
+exception when insufficient_privilege then null; end $$;
+reset role;
+
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000e';
+do $$ declare n int; begin
+  update public.site_settings set value = '{"bucket":"menu","path":"evil.pdf"}' where key = 'menu';
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'employee updated settings'; end if;
+end $$;
+reset role;
+
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+do $$ declare n int; begin
+  update public.site_settings set value = '{"bucket":"menu","path":"Menu_New-2027.pdf"}' where key = 'menu';
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'admin could not update menu'; end if;
+  if (select updated_by from public.site_settings where key = 'menu') <> '00000000-0000-0000-0000-00000000000a' then
+    raise exception 'settings audit not stamped';
+  end if;
+end $$;
+reset role;
+reset request.jwt.claim.sub;
+
+-- --------------------------------------------------------------- pending hotel drop applies cleanly
+\i supabase/pending/20261101000000_drop_hotel.sql
+do $$ begin
+  if to_regclass('public.hotel') is not null or to_regclass('public.hotel_admin') is not null then
+    raise exception 'hotel objects still present';
+  end if;
+  if not exists (select 1 from storage.buckets where id = 'menu') then raise exception 'menu bucket affected'; end if;
+end $$;
