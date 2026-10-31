@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --test --experimental-strip-types --no-warnings=ExperimentalWarning \"tests/**/*.test.ts\"",
+    "test:db": "bash supabase/tests/run.sh",
+    "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
