@@ -14,8 +14,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { MENU_MAX_BYTES, MENU_MAX_MB } from "@/lib/services/hotel/admin/schema";
-import { replaceMenuAction } from "@/lib/services/hotel/admin/hotel.actions";
+import { replaceMenuAction } from "@/lib/services/settings/menu.actions";
+
+const MENU_MAX_MB = 1;
+const MENU_MAX_BYTES = MENU_MAX_MB * 1024 * 1024;
 
 function rejectionMessage(r: FileRejection[]) {
   switch (r[0]?.errors[0]?.code) {
@@ -30,13 +32,7 @@ function rejectionMessage(r: FileRejection[]) {
   }
 }
 
-export function MenuUploader({
-  hotelId,
-  menuLink,
-}: {
-  hotelId: string;
-  menuLink: string | null;
-}) {
+export function MenuUploader({ menuLink }: { menuLink: string | null }) {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -59,12 +55,10 @@ export function MenuUploader({
     if (!file || pending) return;
     startTransition(async () => {
       const fd = new FormData();
-      fd.set("hotelId", hotelId);
       fd.set("file", file);
       const res = await replaceMenuAction(fd);
       if (res.ok) {
         toast.success(res.message);
-        if (res.warning) toast.warning(res.warning);
         setFile(null);
         router.refresh();
       } else {

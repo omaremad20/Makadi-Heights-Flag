@@ -78,7 +78,9 @@ create trigger site_settings_before_write_trg
 
 alter table public.site_settings enable row level security;
 revoke all on public.site_settings from public, anon, authenticated;
-grant select on public.site_settings to anon, authenticated;
+-- Column-scoped: the audit columns (who changed it) are never exposed through
+-- the API, not even for public rows.
+grant select (key, value, is_public, updated_at) on public.site_settings to anon, authenticated;
 grant update (value) on public.site_settings to authenticated;
 
 drop policy if exists site_settings_public_read on public.site_settings;

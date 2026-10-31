@@ -350,6 +350,10 @@ do $$ begin
   if (select value ->> 'path' from public.site_settings where key = 'menu') <> 'Menu_Serenity_2026.pdf' then
     raise exception 'anon cannot read public menu setting';
   end if;
+  begin
+    perform updated_by_email_snapshot from public.site_settings where key = 'menu';
+    raise exception 'anon can read who changed the settings';
+  exception when insufficient_privilege then null; end;
   update public.site_settings set value = '{"bucket":"menu","path":"evil.pdf"}' where key = 'menu';
   raise exception 'anon updated settings';
 exception when insufficient_privilege then null; end $$;
@@ -370,14 +374,35 @@ do $$ declare n int; begin
   update public.site_settings set value = '{"bucket":"menu","path":"Menu_New-2027.pdf"}' where key = 'menu';
   get diagnostics n = row_count;
   if n <> 1 then raise exception 'admin could not update menu'; end if;
+end $$;
+reset role;
+reset request.jwt.claim.sub;
+do $$ begin
   if (select updated_by from public.site_settings where key = 'menu') <> '00000000-0000-0000-0000-00000000000a' then
     raise exception 'settings audit not stamped';
   end if;
 end $$;
-reset role;
-reset request.jwt.claim.sub;
 
--- --------------------------------------------------------------- pending hotel drop applies cleanly
+-- --------------------------------------------------------------- pending hotel drop
+-- the production row (content as of 2026-10-31)
+insert into public.hotel (name, menu_link, beach_access_methods, aquapark, dining)
+values ('Serenity', 'https://example.supabase.co/storage/v1/object/public/menu/Menu_Serenity_2026.pdf',
+  '[{"id":"membership","per":"Per Week","link":"https://qnyhugdkhackdrnufxno.supabase.co/storage/v1/object/public/menu/BEACH_AND_CLUBHOUSE_2026.pdf","price":null,"title":"Clubhouse Membership","description":"Use your clubhouse membership to access the beach and clubhouse."},{"id":"clubhouse_only_membership","per":"Per Week","link":"https://qnyhugdkhackdrnufxno.supabase.co/storage/v1/object/public/menu/CLUBHOUSE_ONLY_2026.pdf","price":null,"title":"Clubhouse Membership","description":"Use your clubhouse membership to access the clubhouse & beach."},{"id":"ticket","per":"Per Day","link":null,"price":600,"title":"Daily Ticket","description":"Pick up a daily beach and clubhouse ticket from the collection office."},{"id":"clubhouse_daily_ticket","per":"Per Day","link":null,"price":450,"title":"Daily Ticket","description":"Pick up a daily clubhouse only ticket from the collection office."}]',
+  '{"price":1000,"schedule":[{"id":"morning","label":"Morning session","end_time":"13:00","start_time":"10:00"},{"id":"break","label":"Break","end_time":"15:00","is_break":true,"start_time":"13:00"},{"id":"afternoon","label":"Afternoon session","end_time":"18:00","start_time":"15:00"}]}',
+  '[{"id":"breakfast","name":"Breakfast","price":"300-400 EGP","end_time":"10:00","start_time":"07:00","description":"Fresh pastries, eggs to order, and seasonal fruit."},{"id":"lunch","name":"Lunch","price":"450 EGP","end_time":"14:30","start_time":"12:30","description":"Mediterranean grill and a rotating regional buffet."},{"id":"dinner","name":"Dinner","price":"500-650EGP - 40EURO","end_time":"21:30","start_time":"18:00","description":"A relaxed, multi-course evening by the water."}]');
+
+-- edited content must abort the drop (nothing removed)
+update public.hotel set dining = jsonb_set(dining, '{0,price}', '"999 EGP"');
+\set ON_ERROR_STOP off
+begin;
+\i supabase/pending/20261101000000_drop_hotel.sql
+rollback;
+\set ON_ERROR_STOP on
+do $$ begin
+  if to_regclass('public.hotel') is null then raise exception 'drop ran despite changed content'; end if;
+end $$;
+update public.hotel set dining = jsonb_set(dining, '{0,price}', '"300-400 EGP"');
+
 \i supabase/pending/20261101000000_drop_hotel.sql
 do $$ begin
   if to_regclass('public.hotel') is not null or to_regclass('public.hotel_admin') is not null then

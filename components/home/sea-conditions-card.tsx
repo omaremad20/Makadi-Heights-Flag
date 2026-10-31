@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { getMarineConditions } from "@/lib/services/marine/marine.service";
 import { SeaFlagRealtime } from "./sea-flag-realtime";
 import { getSeaFlag } from "@/lib/services/sea/sea.service";
-import { getHotel } from "@/lib/hotels/hotels";
+import { SERENITY } from "@/lib/config/hotel";
 
 function formatTemperature(celsius: number): string {
   return `${Math.round(celsius * 10) / 10}°C`;
@@ -38,7 +38,7 @@ export async function SeaConditionsCard({
     getMarineConditions(latitude, longitude, timezone),
     getSeaFlag(),
   ]);
-  const hotel = getHotel("serenity");
+  const hotel = SERENITY;
 
   return (
     <Wrapper>
@@ -47,7 +47,7 @@ export async function SeaConditionsCard({
         marineResult.status === "unavailable" ? (
           <>
             <h1 className="font-brand-heading text-2xl leading-tight -ms-2 mb-3 font-semibold text-brand-primary sm:text-3xl">
-              {hotel!.name + " Alpha" + " Hotel"}
+              {hotel.name + " Alpha" + " Hotel"}
             </h1>
 
             <p className="font-brand-body text-brand-primary/80">
@@ -58,7 +58,7 @@ export async function SeaConditionsCard({
         ) : (
           <>
             <h1 className="font-brand-heading text-2xl leading-tight -ms-2 mb-3 font-semibold text-brand-primary sm:text-3xl">
-              {hotel!.name + " Alpha" + " Hotel"}
+              {hotel.name + " Alpha" + " Hotel"}
             </h1>
 
             <p className="font-brand-heading text-5xl text-brand-primary">
