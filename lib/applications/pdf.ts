@@ -354,7 +354,7 @@ export async function generateApplicationPdf(
         drawInBox(row.name, concatenatedNames, nameFontSize, true, "left");
 
         // Column 2: Strictly ONLY relationship terms in matching order
-        const concatenatedRelatives = bucket.map((p) => p.relative || "Guest").join(" - ");
+        const concatenatedRelatives = bucket.map((p) => p.relative || "—").join(" - ");
         const relFontSize = bucket.length > 3 ? 7.0 : 7.5;
         drawInBox(row.relative, concatenatedRelatives, relFontSize, false, "left", secondaryInk);
 

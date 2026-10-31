@@ -60,7 +60,7 @@ export function AdditionalPersons() {
                   <FormField
                     id={`person-${index}-relative`}
                     label="Relative"
-                    required
+                    optional
                     error={row?.relative?.message}
                   >
                     {(a11y) => (
