@@ -11,11 +11,21 @@ type AccessStatusRow = {
   approved: boolean | null;
 };
 
-const EMPLOYEE_DENIED_PATHS = new Set([
+/**
+ * Admin-only dashboard areas (prefix match, so nested routes such as
+ * /dashboard/applications/export are covered). Pages, server actions and route
+ * handlers also check is_active_approved_admin() themselves, and RLS enforces
+ * it in the database; this redirect is only the first layer.
+ */
+const ADMIN_ONLY_PREFIXES = [
   "/dashboard/profiles",
-  "/dashboard/hotels",
-  "/dashboard/hotels/modify-hotel",
-]);
+  "/dashboard/applications",
+  "/dashboard/menu",
+];
+
+function isAdminOnlyPath(pathname: string) {
+  return ADMIN_ONLY_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
 
 const EMPLOYEE_REDIRECT_PATH = "/dashboard/sea";
 const DASHBOARD_DEFAULT_PATH = "/dashboard/sea";
@@ -159,10 +169,7 @@ export async function proxy(request: NextRequest) {
     }
 
     // Employees cannot access restricted dashboard pages.
-    if (
-      profile?.role === "employee" &&
-      EMPLOYEE_DENIED_PATHS.has(pathname)
-    ) {
+    if (profile?.role !== "admin" && isAdminOnlyPath(pathname)) {
       return redirectWithCookies(
         request,
         EMPLOYEE_REDIRECT_PATH,

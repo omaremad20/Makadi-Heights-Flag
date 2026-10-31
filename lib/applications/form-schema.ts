@@ -47,6 +47,8 @@ export const USER_TYPE_LABELS: Record<UserType, string> = {
  * so Zod only delegates to it. One rule set, no drift.
  */
 const personSchema = z.object({
+  /** Database person id. Only used by the admin edit form; never sent by the public form. */
+  id: z.string().optional(),
   name: z.string(),
   relative: z.string(),
   mobile: z.string(),
