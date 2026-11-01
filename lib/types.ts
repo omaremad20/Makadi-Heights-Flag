@@ -29,13 +29,6 @@ export interface DiningOption {
   description: string;
 }
 
-export interface Serenity {
-  beach_access_methods: BeachAccessMethod[];
-  menu_link: string;
-  aquapark: AquaPark;
-  dining: DiningOption[];
-}
-
 export type Hotel = {
   slug: string;
   name: string;

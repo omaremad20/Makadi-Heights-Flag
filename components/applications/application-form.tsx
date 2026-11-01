@@ -30,6 +30,8 @@ import {
 import { FormSection } from "@/components/applications/form-section";
 import { NationalityField } from "@/components/applications/nationality-field";
 import { PhoneField } from "@/components/applications/phone-field";
+import { PhotoPicker, PhotoSelectionProvider } from "@/components/applications/photo-picker";
+import { PhotoUploadStatus } from "@/components/applications/photo-upload-status";
 import { SuccessPanel } from "@/components/applications/success-panel";
 import { UnsavedChangesDialog } from "@/components/applications/unsaved-changes-dialog";
 import { Button } from "@/components/ui/button";
@@ -63,7 +65,11 @@ import {
   PERIODS,
   USER_TYPES,
 } from "@/lib/applications/vaildation";
+import { usePhotoSelection } from "@/hooks/use-photo-selection";
+import { usePhotoUploads } from "@/hooks/use-photo-uploads";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
+import { buildPhotoJobs } from "@/lib/photos/build-photo-jobs";
+import { guestPhotoDeps } from "@/lib/photos/guest-photo-api";
 
 const DEFAULT_VALUES: ApplicationFormValues = {
   membership_type: "clubhouse_only",
@@ -140,6 +146,7 @@ export function ApplicationForm() {
     reset,
     setValue,
     getValues,
+    setError,
     formState: { errors, isSubmitting, isDirty },
   } = methods;
 
@@ -162,12 +169,19 @@ export function ApplicationForm() {
   const [headcount, setHeadcount] = useState<number>(1);
 
   const inFlight = useRef(false); // blocks repeat submits
+  // One key per submission attempt: retries after a lost response replay the
+  // same application instead of creating a duplicate.
+  const idempotencyKey = useRef<string | null>(null);
 
-  // Unsaved changes warning
+  // Optional photos: compressed on selection, uploaded after the application is saved.
+  const photos = usePhotoSelection();
+  const photoUploads = usePhotoUploads();
+
+  // Unsaved changes warning (also while photos are still uploading)
   const { showConfirmDialog, confirmNavigation, cancelNavigation } =
     useUnsavedChanges({
-      isDirty,
-      isSubmitted: submitted,
+      isDirty: isDirty || Object.keys(photos.slots).length > 0 || photoUploads.running,
+      isSubmitted: submitted && !photoUploads.running,
     });
 
   // Watch form fields needed for live pricing and sync
@@ -185,6 +199,12 @@ export function ApplicationForm() {
   const handleHeadcountChange = (targetCount: number) => {
     if (targetCount < 1 || targetCount > 22) return;
     setHeadcount(targetCount);
+    photos.keepOnly((slot) => {
+      if (slot === "applicant") return true;
+      if (slot === "partner") return targetCount >= 2;
+      const index = Number(slot.split(":")[1]);
+      return Number.isInteger(index) && index < targetCount - 2;
+    });
 
     if (targetCount === 1) {
       setValue("partner_name", "");
@@ -261,6 +281,10 @@ export function ApplicationForm() {
 
   async function onSubmit(values: ApplicationFormValues) {
     if (inFlight.current) return;
+    if (photos.preparing) {
+      toast.error("Wait for the photos to finish preparing");
+      return;
+    }
     inFlight.current = true;
     setSubmitError(null);
 
@@ -277,9 +301,16 @@ export function ApplicationForm() {
           : [],
     };
 
+    idempotencyKey.current ??= crypto.randomUUID();
+    const submissionKey = idempotencyKey.current;
+
     try {
-      const result = await submitApplication(cleanedValues);
+      const result = await submitApplication(cleanedValues, submissionKey);
       if (result.ok) {
+        idempotencyKey.current = null;
+        // Photos go up in the background; the application is already saved.
+        const jobs = buildPhotoJobs(photos.slots, result.application);
+        if (jobs.length > 0) void photoUploads.start(guestPhotoDeps(submissionKey), jobs);
         setSubmitted(true);
         setLastSubmittedValues(cleanedValues);
         toast.success("Application submitted successfully");
@@ -303,6 +334,10 @@ export function ApplicationForm() {
           setPdfGenerating(false);
         }
       } else {
+        if (result.rotateKey) idempotencyKey.current = null;
+        for (const [path, message] of Object.entries(result.fieldErrors ?? {})) {
+          setError(path as Parameters<typeof setError>[0], { type: "server", message });
+        }
         setSubmitError(result.message); // values stay in the form
         toast.error(result.message || "Application not submitted");
       }
@@ -347,6 +382,8 @@ export function ApplicationForm() {
     reset(DEFAULT_VALUES);
     setSubmitError(null);
     setSubmitted(false);
+    photos.clear();
+    photoUploads.reset();
   }
 
   if (submitted) {
@@ -368,11 +405,20 @@ export function ApplicationForm() {
             ? PERIOD_LABELS[lastSubmittedValues.period]
             : undefined
         }
+        photoStatus={
+          <PhotoUploadStatus
+            items={photoUploads.items}
+            running={photoUploads.running}
+            hasFailures={photoUploads.hasFailures}
+            onRetry={() => void photoUploads.retryFailed()}
+          />
+        }
       />
     );
   }
 
   return (
+    <PhotoSelectionProvider value={photos}>
     <FormProvider {...methods}>
       <form
         noValidate
@@ -667,6 +713,7 @@ export function ApplicationForm() {
             autoComplete="email"
             className="sm:col-span-2"
           />
+          <PhotoPicker slot="applicant" personLabel="the applicant" />
         </FormSection>
 
         {/* SECTION 2: PARTNER DETAILS */}
@@ -697,6 +744,7 @@ export function ApplicationForm() {
               inputMode="email"
               autoComplete="off"
             />
+            <PhotoPicker slot="partner" personLabel="the partner" />
           </FormSection>
         )}
 
@@ -733,7 +781,7 @@ export function ApplicationForm() {
             </div>
             <Button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || photos.preparing}
               className="h-11 w-full bg-brand-button px-8 text-brand-button-foreground hover:bg-brand-button/85 sm:w-auto font-medium cursor-pointer"
             >
               {isSubmitting ? (
@@ -759,5 +807,6 @@ export function ApplicationForm() {
         onCancel={cancelNavigation}
       />
     </FormProvider>
+    </PhotoSelectionProvider>
   );
 }

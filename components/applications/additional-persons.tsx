@@ -5,6 +5,7 @@ import { useFieldArray, useFormContext } from "react-hook-form";
 
 import { CONTROL_CLASS, FormField } from "@/components/applications/form-field";
 import { PhoneField } from "@/components/applications/phone-field";
+import { PhotoPicker } from "@/components/applications/photo-picker";
 import { Input } from "@/components/ui/input";
 import type { ApplicationFormValues } from "@/lib/applications/form-schema";
 
@@ -60,7 +61,7 @@ export function AdditionalPersons() {
                   <FormField
                     id={`person-${index}-relative`}
                     label="Relative"
-                    required
+                    optional
                     error={row?.relative?.message}
                   >
                     {(a11y) => (
@@ -80,6 +81,7 @@ export function AdditionalPersons() {
                     optional
                     className="sm:col-span-2"
                   />
+                  <PhotoPicker slot={`additional:${index}`} personLabel={`Additional Member ${n}`} />
                 </fieldset>
               </li>
             );

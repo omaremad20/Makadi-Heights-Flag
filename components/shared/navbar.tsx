@@ -1,7 +1,6 @@
-// Server Component: only <NavMenu /> is a client component.
-// ⚠️ Adjust this import to match your real path / export style.
-
 "use client";
+
+// Hidden on the dashboard and login pages, which have their own chrome.
 
 import { usePathname } from "next/navigation";
 import { MakadiHeghitsLogo } from "./makadi-heights-logo";

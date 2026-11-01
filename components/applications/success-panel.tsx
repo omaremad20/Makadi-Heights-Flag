@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   CircleAlert,
   CircleCheck,
@@ -24,6 +24,8 @@ interface SuccessPanelProps {
   applicantName?: string;
   membershipLabel?: string;
   periodLabel?: string;
+  /** Photo upload progress (rendered under the summary). */
+  photoStatus?: ReactNode;
 }
 
 export function SuccessPanel({
@@ -35,6 +37,7 @@ export function SuccessPanel({
   applicantName,
   membershipLabel,
   periodLabel,
+  photoStatus,
 }: SuccessPanelProps) {
   const heading = useRef<HTMLHeadingElement>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -72,6 +75,8 @@ export function SuccessPanel({
         by community staff.
         {applicantName ? ` Thank you, ${applicantName}.` : ""}
       </p>
+
+      {photoStatus && <div className="mt-6 max-w-xl">{photoStatus}</div>}
 
       {/* Summary Box */}
       {(membershipLabel || periodLabel) && (

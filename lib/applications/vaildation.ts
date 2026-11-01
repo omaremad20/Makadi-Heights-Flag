@@ -41,7 +41,7 @@ export type MembershipType = (typeof MEMBERSHIP_TYPES)[number];
 
 export interface AdditionalPerson {
   name: string;
-  relative: string;
+  relative?: string; // optional since 2026-10-31
   mobile?: string;
 }
 
@@ -240,19 +240,21 @@ export function validateApplication(body: unknown): ValidationResult {
             throw new FieldError("two_latin_name_parts_required");
           return t;
         });
-        const rel = run(`${f}.relative`, () =>
-          plain(required(text(o.relative, true)), 3, 32),
-        );
+        // Optional: blank -> omitted (the database drops blank values too).
+        const rel = run(`${f}.relative`, () => {
+          const t = text(o.relative, true);
+          return t === null ? null : plain(t, 3, 32);
+        });
         const mob = run(`${f}.mobile`, () => {
           const t = text(o.mobile);
           return t === null ? null : phone(t);
         });
         if (n !== undefined && rel !== undefined && mob !== undefined) {
-          out.push(
-            mob === null
-              ? { name: n, relative: rel }
-              : { name: n, relative: rel, mobile: mob },
-          );
+          out.push({
+            name: n,
+            ...(rel === null ? {} : { relative: rel }),
+            ...(mob === null ? {} : { mobile: mob }),
+          });
         }
       });
       additional_persons = out;

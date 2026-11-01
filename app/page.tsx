@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { AquaParkSection } from "@/components/home/aqua-park-section";
+import { HomeHashScroll } from "@/components/home/home-hash-scroll";
 import { BeachAccessSection } from "@/components/home/beach-access-section";
 import { LocationCard } from "@/components/home/location-card";
 import { MealSchedule } from "@/components/home/meal-schedule";
@@ -12,8 +13,8 @@ import MapSkeleton from "@/components/skeletons/map-skeleton";
 import MealScheduleSkeleton from "@/components/skeletons/meal-schedule-skeleton";
 import MenuBtnSkeleton from "@/components/skeletons/menu-btn-skeleton";
 import SeaConditionsCardSkeleton from "@/components/skeletons/sea-conditions-card-skeleton";
-import { getHotel } from "@/lib/hotels/hotels";
-import { fetchHotelData } from "@/lib/services/hotel/hotel.service";
+import { AQUAPARK, BEACH_ACCESS_METHODS, DINING, SERENITY } from "@/lib/config/hotel";
+import { getCurrentMenu } from "@/lib/services/settings/menu.service";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 
@@ -24,16 +25,13 @@ export const metadata: Metadata = {
 };
 
 export default async function Page() {
-  // Single hotel for now; swap for a param/lookup once more hotels exist.
-  const hotel = getHotel("serenity");
-  const { status, data } = await fetchHotelData();
-
-  if (status === "error" || !hotel || !data) {
-    throw new Error("Failed to fetch data");
-  }
+  // Hotel content is static config; only the current menu PDF is read from site_settings.
+  const hotel = SERENITY;
+  const menu = await getCurrentMenu();
 
   return (
     <main className="mx-auto flex min-h-full w-[95%] sm:w-[90%] flex-col gap-10 py-10">
+      <HomeHashScroll />
       <div className="space-y-2">
         <p className="text-lg font-semibold text-[#2D6867]">
           Dear Valued Client,
@@ -55,19 +53,19 @@ export default async function Page() {
       </div>
 
       <Suspense fallback={<BeachAccessSectionSkeleton />}>
-        <BeachAccessSection beach_access_methods={data.beach_access_methods} />
+        <BeachAccessSection beach_access_methods={BEACH_ACCESS_METHODS} />
       </Suspense>
 
       <Suspense fallback={<AquaParkSectionSkeleton />}>
-        <AquaParkSection aquapark={data.aquapark} />
+        <AquaParkSection aquapark={AQUAPARK} />
       </Suspense>
 
       <Suspense fallback={<MealScheduleSkeleton />}>
-        <MealSchedule meals={data.dining} hotel={hotel} />
+        <MealSchedule meals={DINING} hotel={hotel} />
       </Suspense>
 
       <Suspense fallback={<MenuBtnSkeleton />}>
-        <MenuButton href={data.menu_link} />
+        <MenuButton href={menu.url} />
       </Suspense>
 
       <Suspense fallback={<MapSkeleton />}>

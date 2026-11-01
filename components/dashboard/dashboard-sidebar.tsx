@@ -1,6 +1,6 @@
 "use client";
 
-import { Folder, Hotel, UserRound, Users, Waves, type LucideIcon } from "lucide-react";
+import { FileText, Folder, UserRound, Users, Waves, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -26,17 +26,14 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { title: "Sea", href: "/dashboard/sea", icon: Waves },
-  { title: "Hotels", href: "/dashboard/hotels", icon: Hotel },
   { title: "Applications", href: "/dashboard/applications", icon: Folder },
+  { title: "Menu", href: "/dashboard/menu", icon: FileText },
   { title: "Profiles", href: "/dashboard/profiles", icon: Users },
   { title: "My Profile", href: "/dashboard/my-profile", icon: UserRound },
 ];
 
-const EMPLOYEE_DENIED_PATHS = new Set([
-  "/dashboard/profiles",
-  "/dashboard/hotels",
-  "/dashboard/hotels/modify-hotel",
-]);
+// Hidden for employees. Hiding is cosmetic: the proxy, the pages and RLS enforce access.
+const ADMIN_ONLY_PATHS = new Set(["/dashboard/profiles", "/dashboard/applications", "/dashboard/menu"]);
 
 type DashboardSidebarProps = {
   role: string | null;
@@ -46,11 +43,7 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
   const pathname = usePathname();
 
   const visibleNavItems = NAV_ITEMS.filter((item) => {
-    if (role !== "employee") {
-      return true;
-    }
-
-    return !EMPLOYEE_DENIED_PATHS.has(item.href);
+    return role === "admin" || !ADMIN_ONLY_PATHS.has(item.href);
   });
 
   if (pathname.includes("waiting-for-approve")) return null;
